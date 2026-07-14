@@ -18,6 +18,10 @@ public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificat
 
     Optional<User> findByIdAndDeletedFalse(Long id);
 
+    Optional<User> findByGoogleIdAndDeletedFalse(String googleId);
+
+    boolean existsByGoogleIdAndDeletedFalse(String googleId);
+
     Optional<User> findByTenantIdAndUsernameAndDeletedFalse(Long tenantId, String username);
 
     Optional<User> findByTenantIdAndEmailAndDeletedFalse(Long tenantId, String email);
@@ -48,4 +52,16 @@ public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificat
     Page<User> searchUsers(@Param("tenantId") Long tenantId,
                            @Param("keyword") String keyword,
                            Pageable pageable);
+
+    @Query("""
+            SELECT u FROM User u
+            LEFT JOIN FETCH u.tenant
+            LEFT JOIN FETCH u.userProfile
+            LEFT JOIN FETCH u.userRoles ur
+            LEFT JOIN FETCH ur.role r
+            LEFT JOIN FETCH r.rolePermissions rp
+            LEFT JOIN FETCH rp.permission
+            WHERE u.id = :userId AND u.deleted = false
+            """)
+    Optional<User> findByIdWithFullProfile(@Param("userId") Long userId);
 }

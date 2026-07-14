@@ -74,10 +74,13 @@ public class User extends BaseEntity {
     private String email;
 
     @JsonIgnore
-    @NotBlank
     @Size(max = 255)
-    @Column(name = "password_hash", nullable = false, length = 255)
+    @Column(name = "password_hash", length = 255)
     private String passwordHash;
+
+    @Size(max = 255)
+    @Column(name = "google_id", unique = true, length = 255)
+    private String googleId;
 
     @Size(max = 30)
     @Column(name = "phone_number", length = 30)

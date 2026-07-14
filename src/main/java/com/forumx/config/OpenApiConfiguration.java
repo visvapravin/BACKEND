@@ -1,7 +1,5 @@
 package com.forumx.config;
 
-import java.util.List;
-
 import io.swagger.v3.oas.annotations.enums.SecuritySchemeIn;
 import io.swagger.v3.oas.annotations.enums.SecuritySchemeType;
 import io.swagger.v3.oas.annotations.security.SecurityScheme;
@@ -55,62 +53,62 @@ public class OpenApiConfiguration {
 
     @Bean
     public GroupedOpenApi authApi() {
-        return groupedApi("auth", "com.forumx.modules.auth.api", "com.forumx.modules.security.api");
+        return groupedApi("auth", "com.forumx.auth.controller");
     }
 
     @Bean
     public GroupedOpenApi userApi() {
-        return groupedApi("user", "com.forumx.modules.user.api");
+        return groupedApi("user", "com.forumx.modules.user.controller");
     }
 
     @Bean
     public GroupedOpenApi questionApi() {
-        return groupedApi("question", "com.forumx.modules.question.api");
+        return groupedApi("question", "com.forumx.modules.question.controller");
     }
 
     @Bean
     public GroupedOpenApi answerApi() {
-        return groupedApi("answer", "com.forumx.modules.answer.api");
+        return groupedApi("answer", "com.forumx.modules.answer.controller");
     }
 
     @Bean
     public GroupedOpenApi commentApi() {
-        return groupedApi("comment", "com.forumx.modules.comment.api");
+        return groupedApi("comment", "com.forumx.modules.comment.controller");
     }
 
     @Bean
     public GroupedOpenApi voteApi() {
-        return groupedApi("vote", "com.forumx.modules.vote.api");
+        return groupedApi("vote", "com.forumx.modules.vote.controller");
     }
 
     @Bean
     public GroupedOpenApi notificationApi() {
-        return groupedApi("notification", "com.forumx.modules.notification.api");
+        return groupedApi("notification", "com.forumx.modules.notification.controller");
     }
 
     @Bean
     public GroupedOpenApi bookmarkApi() {
-        return groupedApi("bookmark", "com.forumx.modules.bookmark.api");
+        return groupedApi("bookmark", "com.forumx.modules.bookmark.controller");
     }
 
     @Bean
     public GroupedOpenApi attachmentApi() {
-        return groupedApi("attachment", "com.forumx.modules.attachment.api");
+        return groupedApi("attachment", "com.forumx.modules.attachment.controller");
     }
 
     @Bean
     public GroupedOpenApi analyticsApi() {
-        return groupedApi("analytics", "com.forumx.modules.analytics.api");
+        return groupedApi("analytics", "com.forumx.modules.analytics.controller");
     }
 
     @Bean
     public GroupedOpenApi searchApi() {
-        return groupedApi("search", "com.forumx.modules.search.api");
+        return groupedApi("search", "com.forumx.modules.search.controller");
     }
 
     @Bean
     public GroupedOpenApi adminApi() {
-        return groupedApi("admin", "com.forumx.modules.admin.api");
+        return groupedApi("admin", "com.forumx.modules.admin.controller");
     }
 
     private GroupedOpenApi groupedApi(String groupName, String... packagesToScan) {

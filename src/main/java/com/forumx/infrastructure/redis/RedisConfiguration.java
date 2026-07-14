@@ -26,6 +26,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 @Configuration
 @EnableCaching
 @EnableConfigurationProperties(RedisConfiguration.RedisCacheProperties.class)
+@org.springframework.context.annotation.Profile("!dev")
 public class RedisConfiguration {
 
     @Bean

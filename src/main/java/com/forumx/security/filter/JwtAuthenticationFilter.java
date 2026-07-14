@@ -50,8 +50,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final AuthenticationEntryPoint authenticationEntryPoint;
 
     private final RequestMatcher ignoredEndpoints = new OrRequestMatcher(
-            new AntPathRequestMatcher("/api/v1/auth/**"),
+            new AntPathRequestMatcher("/api/v1/auth/register"),
+            new AntPathRequestMatcher("/api/v1/auth/login"),
+            new AntPathRequestMatcher("/api/v1/auth/refresh"),
+            new AntPathRequestMatcher("/api/v1/auth/logout"),
             new AntPathRequestMatcher("/swagger-ui/**"),
+            new AntPathRequestMatcher("/swagger-ui.html"),
+            new AntPathRequestMatcher("/api-docs/**"),
             new AntPathRequestMatcher("/v3/api-docs/**"),
             new AntPathRequestMatcher("/actuator/health")
     );

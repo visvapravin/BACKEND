@@ -15,11 +15,15 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.actuate.health.Health;
 import org.springframework.boot.actuate.health.HealthIndicator;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.kafka.KafkaProperties;
+import org.springframework.boot.ssl.SslBundles;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+
 import org.springframework.kafka.annotation.EnableKafka;
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
 import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
@@ -37,7 +41,12 @@ import org.springframework.util.backoff.FixedBackOff;
 
 @Configuration
 @EnableKafka
-@EnableConfigurationProperties(KafkaConfiguration.KafkaTopologyProperties.class)
+@EnableConfigurationProperties({KafkaConfiguration.KafkaTopologyProperties.class, KafkaProperties.class})
+@ConditionalOnProperty(
+       prefix = "app.kafka",
+       name = "enabled",
+       havingValue = "true"
+)
 public class KafkaConfiguration {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(KafkaConfiguration.class);
@@ -86,8 +95,8 @@ public class KafkaConfiguration {
     }
 
     @Bean
-    public KafkaAdmin kafkaAdmin(KafkaProperties kafkaProperties) {
-        Map<String, Object> adminProperties = new HashMap<>(kafkaProperties.buildAdminProperties());
+    public KafkaAdmin kafkaAdmin(KafkaProperties kafkaProperties, ObjectProvider<SslBundles> sslBundles) {
+        Map<String, Object> adminProperties = new HashMap<>(kafkaProperties.buildAdminProperties(sslBundles.getIfAvailable()));
         adminProperties.put(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, kafkaProperties.getBootstrapServers());
         return new KafkaAdmin(adminProperties);
     }

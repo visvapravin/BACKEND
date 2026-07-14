@@ -14,6 +14,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.experimental.SuperBuilder;
+import lombok.Builder;
 import org.springframework.data.annotation.CreatedBy;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedBy;
@@ -54,6 +55,7 @@ public abstract class BaseEntity {
     @Column(nullable = false)
     private Long version;
 
+    @Builder.Default
     @Column(nullable = false)
     private boolean deleted = false;
 

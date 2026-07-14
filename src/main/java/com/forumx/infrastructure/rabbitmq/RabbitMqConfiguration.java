@@ -25,6 +25,7 @@ import org.springframework.amqp.support.converter.MessageConverter;
 
 @Configuration
 @EnableConfigurationProperties(RabbitMqConfiguration.RabbitMqProperties.class)
+@org.springframework.context.annotation.Profile("!dev")
 public class RabbitMqConfiguration {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(RabbitMqConfiguration.class);

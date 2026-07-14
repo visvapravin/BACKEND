@@ -1,14 +1,13 @@
 package com.forumx.auth.service;
 
-import java.time.Instant;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 
 import com.forumx.auth.dto.request.LoginRequest;
 import com.forumx.auth.dto.request.LogoutRequest;
 import com.forumx.auth.dto.request.RefreshTokenRequest;
 import com.forumx.auth.dto.request.RegisterRequest;
+import com.forumx.auth.dto.response.CurrentUserResponse;
 import com.forumx.auth.dto.response.LoginResponse;
 import com.forumx.auth.dto.response.RefreshTokenResponse;
 import com.forumx.auth.dto.response.RegisterResponse;
@@ -28,6 +27,28 @@ import com.forumx.security.jwt.JwtTokenProvider;
 import com.forumx.security.model.CustomUserDetails;
 import com.forumx.tenant.entity.Tenant;
 import com.forumx.tenant.repository.TenantRepository;
+import com.forumx.auth.dto.request.ResendVerificationRequest;
+import com.forumx.auth.verification.entity.VerificationToken;
+import com.forumx.auth.verification.repository.VerificationTokenRepository;
+import com.forumx.mail.EmailService;
+import com.forumx.tenant.resolver.TenantResolver;
+import com.forumx.auth.dto.request.ForgotPasswordRequest;
+import com.forumx.auth.dto.request.ResetPasswordRequest;
+import com.forumx.auth.passwordreset.entity.PasswordResetToken;
+import com.forumx.auth.passwordreset.repository.PasswordResetTokenRepository;
+import com.forumx.common.exception.PasswordMismatchException;
+import com.forumx.common.exception.PasswordReuseException;
+import com.forumx.common.exception.PasswordNotSetException;
+import com.forumx.auth.dto.request.GoogleLoginRequest;
+import org.springframework.web.util.UriComponentsBuilder;
+import org.springframework.beans.factory.annotation.Value;
+import java.time.Duration;
+import java.time.Instant;
+import java.security.SecureRandom;
+import java.security.MessageDigest;
+import java.nio.charset.StandardCharsets;
+import java.security.NoSuchAlgorithmException;
+import java.util.Base64;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -61,6 +82,26 @@ public class AuthenticationService {
     private final AuthenticationManager authenticationManager;
     private final JwtTokenProvider jwtTokenProvider;
     private final AuthMapper authMapper;
+    private final VerificationTokenRepository verificationTokenRepository;
+    private final EmailService emailService;
+    private final TenantResolver tenantResolver;
+    private final PasswordResetTokenRepository passwordResetTokenRepository;
+    private final GoogleTokenVerifierService googleTokenVerifierService;
+
+    @Value("${app.frontend.base-url}")
+    private String frontendBaseUrl;
+
+    @Value("${app.frontend.verification-path}")
+    private String verificationPath;
+
+    @Value("${app.frontend.reset-password-path}")
+    private String resetPasswordPath;
+
+    @Value("${app.verification.token-expiration:24h}")
+    private Duration tokenExpiration;
+
+    @Value("${app.password-reset.token-expiration:30m}")
+    private Duration resetTokenExpiration;
 
     /**
      * Registers a new User within the specified tenant.
@@ -91,8 +132,34 @@ public class AuthenticationService {
         createUserProfile(request, user);
         assignDefaultRole(user);
 
+        // Generate verification token
+        String rawToken = generateRawToken();
+        String tokenHash = hashToken(rawToken);
+
+        VerificationToken verificationToken = VerificationToken.builder()
+                .user(user)
+                .tokenHash(tokenHash)
+                .expiresAt(Instant.now().plus(tokenExpiration))
+                .used(false)
+                .build();
+        verificationTokenRepository.save(verificationToken);
+
+        String verificationUrl = UriComponentsBuilder.fromHttpUrl(frontendBaseUrl)
+                .path(verificationPath)
+                .queryParam("token", rawToken)
+                .build()
+                .toUriString();
+        String message = "Registration successful. Please verify your email.";
+
+        try {
+            emailService.sendVerificationEmail(user.getEmail(), user.getUsername(), verificationUrl);
+        } catch (Exception e) {
+            log.error("Failed to send verification email during registration for username={}", user.getUsername(), e);
+            message = "Registration successful, but verification email delivery failed. Please request a new verification email.";
+        }
+
         log.info("Successful registration: username={}, tenant={}", user.getUsername(), tenant.getSlug());
-        return buildRegisterResponse(user, "User registered successfully");
+        return buildRegisterResponse(user, message);
     }
 
     /**
@@ -106,6 +173,15 @@ public class AuthenticationService {
     public LoginResponse login(LoginRequest request, HttpServletRequest servletRequest) {
         log.debug("Validation details: authenticating usernameOrEmail={}", request.getUsernameOrEmail());
 
+        Long tenantId = tenantResolver.resolveTenantId();
+        User checkUser = userRepository.findByTenantIdAndUsernameAndDeletedFalse(tenantId, request.getUsernameOrEmail())
+                .or(() -> userRepository.findByTenantIdAndEmailAndDeletedFalse(tenantId, request.getUsernameOrEmail()))
+                .orElseThrow(() -> new BadCredentialsException("Invalid credentials"));
+
+        if (checkUser.getPasswordHash() == null) {
+            throw new PasswordNotSetException("This account currently uses Google Sign-In. Create a password to enable email login.");
+        }
+
         Authentication authentication = authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(request.getUsernameOrEmail(), request.getPassword())
         );
@@ -116,6 +192,10 @@ public class AuthenticationService {
         validateUserStatus(user);
         validateTenant(user.getTenant());
 
+        if (!user.isEmailVerified()) {
+            throw new com.forumx.common.exception.EmailNotVerifiedException("Please verify your email before logging in.");
+        }
+
         String accessToken = issueAccessToken(user);
         String refreshToken = issueRefreshToken();
 
@@ -123,6 +203,109 @@ public class AuthenticationService {
         persistRefreshToken(user, refreshToken, metadata);
 
         log.info("Successful login: username={}, tenant={}", user.getUsername(), user.getTenant().getSlug());
+        return buildLoginResponse(user, accessToken, refreshToken);
+    }
+
+    /**
+     * Authenticates a user using a Google ID Token. Links accounts if email matches.
+     *
+     * @param request        the Google login details
+     * @param servletRequest the HTTP servlet request context
+     * @return the authentication response containing JWT tokens
+     */
+    @Transactional
+    public LoginResponse googleLogin(GoogleLoginRequest request, HttpServletRequest servletRequest) {
+        log.debug("Validation details: google login for tenantSlug={}", request.getTenantSlug());
+
+        // Step 1: Verify Google ID Token
+        GoogleTokenVerifierService.GoogleClaims claims = googleTokenVerifierService.verify(request.getIdToken());
+        String googleSub = claims.googleSub();
+        String email = claims.email();
+
+        Tenant tenant = validateTenant(request.getTenantSlug());
+        User user;
+
+        // Step 2: Find user by google_id globally
+        java.util.Optional<User> userByGoogleId = userRepository.findByGoogleIdAndDeletedFalse(googleSub);
+        if (userByGoogleId.isPresent()) {
+            User existingUser = userByGoogleId.get();
+            // Validate that it belongs to the current tenant and email to prevent hijacking / cross-tenant linking
+            if (!existingUser.getTenant().getId().equals(tenant.getId()) || !existingUser.getEmail().equals(email)) {
+                log.error("SECURITY EVENT: Google ID {} is already linked to user {} (tenant {}) but login requested for tenant {} and email {}",
+                        googleSub, existingUser.getEmail(), existingUser.getTenant().getSlug(), tenant.getSlug(), email);
+                throw new BadCredentialsException("Google account is already linked to another account");
+            }
+            user = existingUser;
+        } else {
+            // Step 3: Find user by tenant and verified email
+            java.util.Optional<User> userOpt = userRepository.findByTenantIdAndEmailAndDeletedFalse(tenant.getId(), email);
+            if (userOpt.isPresent()) {
+                user = userOpt.get();
+                if (user.getGoogleId() == null) {
+                    // Link Google account
+                    user.setGoogleId(googleSub);
+                    if (user.getUserProfile() != null && (user.getUserProfile().getAvatarUrl() == null || user.getUserProfile().getAvatarUrl().isEmpty())) {
+                        user.getUserProfile().setAvatarUrl(claims.pictureUrl());
+                        userProfileRepository.save(user.getUserProfile());
+                    }
+                    userRepository.save(user);
+                } else {
+                    // Stored googleId is not null, and doesn't match the sub (since findByGoogleId didn't find it). Reject relinking.
+                    log.error("SECURITY EVENT: Google ID mismatch for email {}. Stored Google ID: {}, Verified Google ID: {}",
+                            user.getEmail(), user.getGoogleId(), googleSub);
+                    throw new BadCredentialsException("Google account mismatch");
+                }
+            } else {
+                // Step 4: Create new User
+                // Ensure unique username in the tenant
+                String baseUsername = email.split("@")[0];
+                String username = baseUsername;
+                int count = 1;
+                while (userRepository.existsByTenantIdAndUsername(tenant.getId(), username)) {
+                    username = baseUsername + count;
+                    count++;
+                }
+
+                user = User.builder()
+                        .tenant(tenant)
+                        .username(username)
+                        .email(email)
+                        .passwordHash(null) // passwordHash = null
+                        .emailVerified(true) // emailVerified = true
+                        .googleId(googleSub) // googleId = googleSub
+                        .status(User.UserStatus.ACTIVE)
+                        .enabled(true)
+                        .build();
+                userRepository.saveAndFlush(user);
+
+                // Create UserProfile
+                RegisterRequest regReq = RegisterRequest.builder()
+                        .firstName(claims.firstName())
+                        .lastName(claims.lastName())
+                        .displayName(claims.fullName() != null ? claims.fullName() : username)
+                        .build();
+                UserProfile profile = createUserProfile(regReq, user);
+                user.setUserProfile(profile);
+                // Populate profile picture if provided
+                if (claims.pictureUrl() != null) {
+                    profile.setAvatarUrl(claims.pictureUrl());
+                    userProfileRepository.save(profile);
+                }
+
+                assignDefaultRole(user);
+            }
+        }
+
+        validateUserStatus(user);
+        validateTenant(user.getTenant());
+
+        String accessToken = issueAccessToken(user);
+        String refreshToken = issueRefreshToken();
+
+        ClientMetadata metadata = extractClientMetadata(servletRequest);
+        persistRefreshToken(user, refreshToken, metadata);
+
+        log.info("Successful Google login: username={}, tenant={}", user.getUsername(), user.getTenant().getSlug());
         return buildLoginResponse(user, accessToken, refreshToken);
     }
 
@@ -175,6 +358,56 @@ public class AuthenticationService {
         log.debug("Validation details: logging out refresh token");
         revokeRefreshToken(request.getRefreshToken());
         log.info("Successful logout");
+    }
+
+    /**
+     * Retrieves the current authenticated user's profile.
+     *
+     * @param userId the authenticated user's ID
+     * @return the current user response payload
+     */
+    @Transactional(readOnly = true)
+    public CurrentUserResponse getCurrentUser(Long userId) {
+        log.debug("Retrieving current user profile for userId={}", userId);
+
+        User user = userRepository.findByIdWithFullProfile(userId)
+                .orElseThrow(() -> {
+                    log.warn("Authenticated user not found: userId={}", userId);
+                    return new IllegalArgumentException("User not found");
+                });
+
+        CustomUserDetails userDetails = new CustomUserDetails(user);
+        List<String> roles = userDetails.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority)
+                .filter(auth -> auth.startsWith("ROLE_"))
+                .map(auth -> auth.substring(5))
+                .toList();
+
+        List<String> permissions = userDetails.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority)
+                .filter(auth -> !auth.startsWith("ROLE_"))
+                .toList();
+
+        UserProfile profile = user.getUserProfile();
+
+        return CurrentUserResponse.builder()
+                .userId(user.getId())
+                .username(user.getUsername())
+                .email(user.getEmail())
+                .phoneNumber(user.getPhoneNumber())
+                .displayName(profile != null ? profile.getDisplayName() : null)
+                .firstName(profile != null ? profile.getFirstName() : null)
+                .lastName(profile != null ? profile.getLastName() : null)
+                .tenantId(user.getTenant().getId())
+                .tenantSlug(user.getTenant().getSlug())
+                .active(user.getStatus() == User.UserStatus.ACTIVE)
+                .enabled(user.isEnabled())
+                .accountNonLocked(!user.isAccountLocked())
+                .accountNonExpired(!user.isAccountExpired())
+                .credentialsNonExpired(!user.isCredentialsExpired())
+                .roles(roles)
+                .permissions(permissions)
+                .build();
     }
 
     /**
@@ -411,6 +644,235 @@ public class AuthenticationService {
                 .tenantId(user.getTenant().getId())
                 .message(message)
                 .build();
+    }
+
+    /**
+     * Verifies a user's email address using the provided raw token.
+     *
+     * @param rawToken the raw token received in the verification link
+     */
+    @Transactional
+    public void verifyEmail(String rawToken) {
+        if (rawToken == null || rawToken.isBlank()) {
+            throw new com.forumx.common.exception.InvalidTokenException("Token is invalid");
+        }
+
+        String tokenHash = hashToken(rawToken);
+        VerificationToken verificationToken = verificationTokenRepository.findByTokenHash(tokenHash)
+                .orElseThrow(() -> new com.forumx.common.exception.InvalidTokenException("Token is invalid"));
+
+        if (verificationToken.isUsed()) {
+            throw new com.forumx.common.exception.TokenAlreadyUsedException("Verification token has already been used");
+        }
+
+        if (verificationToken.isExpired()) {
+            throw new com.forumx.common.exception.ExpiredTokenException("Verification token has expired");
+        }
+
+        User user = verificationToken.getUser();
+        if (user.isEmailVerified()) {
+            throw new com.forumx.common.exception.AlreadyVerifiedException("User is already verified");
+        }
+
+        user.setEmailVerified(true);
+        userRepository.save(user);
+
+        verificationToken.setUsed(true);
+        verificationToken.setUsedAt(Instant.now());
+        verificationTokenRepository.save(verificationToken);
+
+        log.info("Email verified successfully for user username={}", user.getUsername());
+    }
+
+    /**
+     * Invalidates prior unused tokens and generates/sends a new verification email.
+     *
+     * @param request the resend request containing the user's email
+     */
+    @Transactional
+    public void resendVerification(ResendVerificationRequest request) {
+        Long tenantId = tenantResolver.resolveTenantId();
+        User user = userRepository.findByTenantIdAndEmailAndDeletedFalse(tenantId, request.getEmail())
+                .orElseThrow(() -> new jakarta.persistence.EntityNotFoundException("User not found"));
+
+        if (user.isEmailVerified()) {
+            throw new com.forumx.common.exception.AlreadyVerifiedException("User is already verified");
+        }
+
+        // Invalidate old verification tokens
+        List<VerificationToken> unusedTokens = verificationTokenRepository.findAllByUserAndUsedFalse(user);
+        for (VerificationToken oldToken : unusedTokens) {
+            oldToken.setUsed(true);
+            oldToken.setUsedAt(Instant.now());
+        }
+        verificationTokenRepository.saveAll(unusedTokens);
+
+        // Generate new token
+        String rawToken = generateRawToken();
+        String tokenHash = hashToken(rawToken);
+
+        VerificationToken newVerificationToken = VerificationToken.builder()
+                .user(user)
+                .tokenHash(tokenHash)
+                .expiresAt(Instant.now().plus(tokenExpiration))
+                .used(false)
+                .build();
+        verificationTokenRepository.save(newVerificationToken);
+
+        String verificationUrl = UriComponentsBuilder.fromHttpUrl(frontendBaseUrl)
+                .path(verificationPath)
+                .queryParam("token", rawToken)
+                .build()
+                .toUriString();
+
+        try {
+            emailService.sendVerificationEmail(user.getEmail(), user.getUsername(), verificationUrl);
+        } catch (Exception e) {
+            log.error("Failed to resend verification email for username={}", user.getUsername(), e);
+            throw new RuntimeException("Email delivery failed", e);
+        }
+        log.info("Resent verification email successfully to user {}", user.getUsername());
+    }
+
+    private String generateRawToken() {
+        byte[] bytes = new byte[32];
+        new SecureRandom().nextBytes(bytes);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+    }
+
+    private String hashToken(String rawToken) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(rawToken.getBytes(StandardCharsets.UTF_8));
+            StringBuilder hexString = new StringBuilder();
+            for (byte b : hash) {
+                String hex = Integer.toHexString(0xff & b);
+                if (hex.length() == 1) hexString.append('0');
+                hexString.append(hex);
+            }
+            return hexString.toString();
+        } catch (NoSuchAlgorithmException e) {
+            throw new RuntimeException("SHA-256 digest algorithm not available", e);
+        }
+    }
+
+    /*
+     * Email links intentionally point to the frontend application.
+     *
+     * The frontend is responsible for:
+     *  - reading the token
+     *  - collecting user input
+     *  - invoking backend REST APIs.
+     *
+     * The backend remains a stateless REST service.
+     */
+    /**
+     * Initiates the forgot password workflow by issuing a secure reset token
+     * and sending an email. Does not reveal whether the email exists.
+     *
+     * @param request the forgot password request containing the user's email
+     */
+    @Transactional
+    public void forgotPassword(ForgotPasswordRequest request) {
+        Long tenantId = tenantResolver.resolveTenantId();
+        java.util.Optional<User> userOpt = userRepository.findByTenantIdAndEmailAndDeletedFalse(tenantId, request.getEmail());
+
+        if (userOpt.isEmpty()) {
+            // Mitigate user enumeration via dummy delay / fake hashing
+            passwordEncoder.encode("dummyForUserEnumerationSafety");
+            log.info("Forgot password requested for non-existing email: {}", request.getEmail());
+            return;
+        }
+
+        User user = userOpt.get();
+
+        // Invalidate prior unused reset tokens
+        List<PasswordResetToken> activeTokens = passwordResetTokenRepository.findAllByUserAndUsedFalse(user);
+        for (PasswordResetToken token : activeTokens) {
+            token.setUsed(true);
+            token.setUsedAt(Instant.now());
+        }
+        passwordResetTokenRepository.saveAll(activeTokens);
+
+        // Generate reset token
+        String rawToken = generateRawToken();
+        String tokenHash = hashToken(rawToken);
+
+        PasswordResetToken resetToken = PasswordResetToken.builder()
+                .user(user)
+                .tokenHash(tokenHash)
+                .expiresAt(Instant.now().plus(resetTokenExpiration))
+                .used(false)
+                .build();
+        passwordResetTokenRepository.save(resetToken);
+
+        // Build reset URL using configured base URL and Spring's UriComponentsBuilder
+        String resetUrl = UriComponentsBuilder.fromHttpUrl(frontendBaseUrl)
+                .path(resetPasswordPath)
+                .queryParam("token", rawToken)
+                .build()
+                .toUriString();
+
+        try {
+            emailService.sendPasswordResetEmail(user.getEmail(), user.getUsername(), resetUrl);
+        } catch (Exception e) {
+            // SMTP failures must not roll back the database transaction
+            log.error("Failed to send password reset email for user {}", user.getUsername(), e);
+        }
+
+        log.info("Password reset token generated and email dispatched for user {}", user.getUsername());
+    }
+
+    /**
+     * Resets a user's password using the provided reset token.
+     * Revokes all refresh tokens upon successful reset.
+     *
+     * @param request the reset password details
+     */
+    @Transactional
+    public void resetPassword(ResetPasswordRequest request) {
+        if (request.getNewPassword() == null || !request.getNewPassword().equals(request.getConfirmPassword())) {
+            throw new PasswordMismatchException("Passwords do not match");
+        }
+
+        String tokenHash = hashToken(request.getToken());
+        PasswordResetToken resetToken = passwordResetTokenRepository.findByTokenHash(tokenHash)
+                .orElseThrow(() -> new com.forumx.common.exception.InvalidTokenException("Token is invalid"));
+
+        if (resetToken.isUsed()) {
+            throw new com.forumx.common.exception.TokenAlreadyUsedException("Password reset token has already been used");
+        }
+
+        if (resetToken.isExpired()) {
+            throw new com.forumx.common.exception.ExpiredTokenException("Password reset token has expired");
+        }
+
+        User user = resetToken.getUser();
+
+        // Reject password reuse
+        if (passwordEncoder.matches(request.getNewPassword(), user.getPasswordHash())) {
+            throw new PasswordReuseException("Cannot reset password to the current password");
+        }
+
+        // Update password
+        user.setPasswordHash(passwordEncoder.encode(request.getNewPassword()));
+        userRepository.save(user);
+
+        // Mark token as used
+        resetToken.setUsed(true);
+        resetToken.setUsedAt(Instant.now());
+        passwordResetTokenRepository.save(resetToken);
+
+        // Revoke all active refresh tokens for the user
+        List<RefreshToken> activeRefreshTokens = refreshTokenRepository.findAllByUser(user);
+        for (RefreshToken rfToken : activeRefreshTokens) {
+            rfToken.revoke();
+        }
+        refreshTokenRepository.saveAll(activeRefreshTokens);
+
+        log.info("Password reset successfully and refresh tokens revoked for user {}", user.getUsername());
+        
+        // TODO: Expired and used verification/password reset tokens should later be cleaned using a scheduled job (e.g., Spring @Scheduled) or a database maintenance task.
     }
 
     /**

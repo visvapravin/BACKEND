@@ -41,6 +41,7 @@ public interface AuthMapper {
     @Mapping(target = "userProfile", ignore = true)
     @Mapping(target = "userRoles", ignore = true)
     @Mapping(target = "refreshTokens", ignore = true)
+    @Mapping(target = "googleId", ignore = true)
     User toUser(RegisterRequest request);
 
     /**

@@ -15,7 +15,11 @@ public enum ErrorCode {
     INTERNAL_SERVER_ERROR("Internal server error"),
     TOKEN_EXPIRED("Token has expired"),
     TOKEN_INVALID("Token is invalid"),
-    TENANT_NOT_FOUND("Tenant not found");
+    EMAIL_NOT_VERIFIED("Email not verified"),
+    TENANT_NOT_FOUND("Tenant not found"),
+    PASSWORDS_DO_NOT_MATCH("Passwords do not match"),
+    PASSWORD_REUSE("Cannot reset password to the current password"),
+    PASSWORD_NOT_SET("This account currently uses Google Sign-In. Create a password to enable email login.");
 
     private final String defaultMessage;
 
