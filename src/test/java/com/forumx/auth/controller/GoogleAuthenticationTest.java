@@ -123,9 +123,6 @@ public class GoogleAuthenticationTest {
         
         UserProfile profile = createdUser.getUserProfile();
         assertNotNull(profile);
-        assertEquals("New", profile.getFirstName());
-        assertEquals("User", profile.getLastName());
-        assertEquals("New User", profile.getDisplayName());
         assertEquals("https://avatar.url/newuser", profile.getAvatarUrl());
     }
 
@@ -145,7 +142,6 @@ public class GoogleAuthenticationTest {
 
         UserProfile profile = UserProfile.builder()
                 .user(localUser)
-                .displayName("Local User")
                 .build();
         userProfileRepository.save(profile);
         localUser.setUserProfile(profile);

@@ -159,7 +159,7 @@ public class AuthController {
                             schema = @Schema(implementation = RegisterRequest.class),
                             examples = @ExampleObject(
                                      name = "Registration Request Payload",
-                                     value = "{\"username\":\"johndoe\",\"email\":\"johndoe@example.com\",\"password\":\"SecurePassword123!\",\"confirmPassword\":\"SecurePassword123!\",\"tenantSlug\":\"default\",\"firstName\":\"John\",\"lastName\":\"Doe\",\"displayName\":\"John Doe\",\"phoneNumber\":\"+1234567890\",\"company\":\"ForumX Inc.\",\"department\":\"Engineering\",\"jobTitle\":\"Software Architect\",\"timezone\":\"UTC\",\"locale\":\"en_US\"}"
+                                     value = "{\"tenantSlug\":\"default\",\"username\":\"visva\",\"email\":\"visva@gmail.com\",\"password\":\"Password@123\",\"confirmPassword\":\"Password@123\"}"
                             )
                     )
             )
@@ -843,7 +843,7 @@ public class AuthController {
                             schema = @Schema(implementation = ApiResponse.class),
                             examples = @ExampleObject(
                                     name = "Current User Success Example",
-                                    value = "{\"success\":true,\"message\":\"Current user retrieved successfully\",\"data\":{\"userId\":2,\"username\":\"visva\",\"email\":\"visva@test.com\",\"phoneNumber\":\"+1234567890\",\"displayName\":\"Visva Pravin\",\"firstName\":\"Visva\",\"lastName\":\"Pravin\",\"tenantId\":1,\"tenantSlug\":\"default\",\"active\":true,\"enabled\":true,\"accountNonLocked\":true,\"accountNonExpired\":true,\"credentialsNonExpired\":true,\"roles\":[\"USER\"],\"permissions\":[]},\"timestamp\":\"2026-07-13T09:00:00Z\"}"
+                                     value = "{\"success\":true,\"message\":\"Current user retrieved successfully\",\"data\":{\"userId\":2,\"username\":\"visva\",\"email\":\"visva@test.com\",\"tenantId\":1,\"tenantSlug\":\"default\",\"active\":true,\"enabled\":true,\"accountNonLocked\":true,\"accountNonExpired\":true,\"credentialsNonExpired\":true,\"roles\":[\"USER\"],\"permissions\":[]},\"timestamp\":\"2026-07-13T09:00:00Z\"}"
                             )
                     )
             ),

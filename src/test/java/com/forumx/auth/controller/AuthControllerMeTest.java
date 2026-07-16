@@ -72,9 +72,6 @@ public class AuthControllerMeTest {
         UserProfile userProfile = UserProfile.builder()
                 .id(10L)
                 .user(mockUser)
-                .displayName("Visva Pravin")
-                .firstName("Visva")
-                .lastName("Pravin")
                 .build();
 
         mockUser.setUserProfile(userProfile);
@@ -113,9 +110,6 @@ public class AuthControllerMeTest {
                 .userId(2L)
                 .username("visva")
                 .email("visva@test.com")
-                .displayName("Visva Pravin")
-                .firstName("Visva")
-                .lastName("Pravin")
                 .tenantId(1L)
                 .tenantSlug("default")
                 .active(true)
@@ -138,7 +132,6 @@ public class AuthControllerMeTest {
                 .andExpect(jsonPath("$.message").value("Current user retrieved successfully"))
                 .andExpect(jsonPath("$.data.userId").value(2))
                 .andExpect(jsonPath("$.data.username").value("visva"))
-                .andExpect(jsonPath("$.data.displayName").value("Visva Pravin"))
                 .andExpect(jsonPath("$.data.email").value("visva@test.com"))
                 .andExpect(jsonPath("$.data.tenantId").value(1))
                 .andExpect(jsonPath("$.data.tenantSlug").value("default"))

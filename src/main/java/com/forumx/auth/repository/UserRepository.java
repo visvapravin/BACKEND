@@ -30,6 +30,14 @@ public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificat
 
     boolean existsByTenantIdAndEmail(Long tenantId, String email);
 
+    /**
+     * Checks if a user exists with the given email address globally.
+     *
+     * @param email the email address
+     * @return true if exists, false otherwise
+     */
+    boolean existsByEmail(String email);
+
     Page<User> findAllByTenantIdAndDeletedFalse(Long tenantId, Pageable pageable);
 
     List<User> findAllByStatus(UserStatus status);
@@ -38,16 +46,20 @@ public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificat
 
     Optional<User> findByTenantIdAndEmailAndEnabledTrue(Long tenantId, String email);
 
+    /**
+     * Performs a paginated search for active users under a specific tenant.
+     * Matches keyword case-insensitively against username.
+     *
+     * @param tenantId the tenant ID
+     * @param keyword  the search query keyword
+     * @param pageable pagination parameters
+     * @return page of matching users
+     */
     @Query("""
             SELECT u FROM User u
-            LEFT JOIN u.userProfile p
             WHERE u.tenant.id = :tenantId
               AND u.deleted = false
-              AND (
-                  LOWER(u.username) LIKE LOWER(CONCAT('%', :keyword, '%'))
-                  OR LOWER(u.email) LIKE LOWER(CONCAT('%', :keyword, '%'))
-                  OR LOWER(p.displayName) LIKE LOWER(CONCAT('%', :keyword, '%'))
-              )
+              AND LOWER(u.username) LIKE LOWER(CONCAT('%', :keyword, '%'))
             """)
     Page<User> searchUsers(@Param("tenantId") Long tenantId,
                            @Param("keyword") String keyword,

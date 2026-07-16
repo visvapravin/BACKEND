@@ -63,7 +63,7 @@ public class OpenApiConfiguration {
 
     @Bean
     public GroupedOpenApi questionApi() {
-        return groupedApi("question", "com.forumx.modules.question.controller");
+        return groupedApi("question", "com.forumx.question.controller");
     }
 
     @Bean

@@ -32,9 +32,7 @@ import lombok.experimental.SuperBuilder;
         name = "user_profiles",
         indexes = {
                 @Index(name = "idx_user_profiles_user_id", columnList = "user_id"),
-                @Index(name = "idx_user_profiles_display_name", columnList = "display_name"),
-                @Index(name = "idx_user_profiles_location", columnList = "location"),
-                @Index(name = "idx_user_profiles_company", columnList = "company")
+                @Index(name = "idx_user_profiles_location", columnList = "location")
         }
 )
 public class UserProfile extends BaseEntity {
@@ -47,18 +45,6 @@ public class UserProfile extends BaseEntity {
     private User user;
 
     // ── Name fields ─────────────────────────────────────────────────────
-
-    @Size(max = 100)
-    @Column(name = "first_name", length = 100)
-    private String firstName;
-
-    @Size(max = 100)
-    @Column(name = "last_name", length = 100)
-    private String lastName;
-
-    @Size(max = 100)
-    @Column(name = "display_name", length = 100)
-    private String displayName;
 
     // ── About ───────────────────────────────────────────────────────────
 
@@ -88,29 +74,9 @@ public class UserProfile extends BaseEntity {
 
     @Size(max = 150)
     @Column(length = 150)
-    private String company;
-
-    @Size(max = 100)
-    @Column(length = 100)
-    private String department;
-
-    @Size(max = 100)
-    @Column(name = "job_title", length = 100)
-    private String jobTitle;
-
-    @Size(max = 150)
-    @Column(length = 150)
     private String location;
 
     // ── Regional ────────────────────────────────────────────────────────
-
-    @Size(max = 50)
-    @Column(length = 50)
-    private String timezone;
-
-    @Size(max = 10)
-    @Column(length = 10)
-    private String locale;
 
     // ── Personal ────────────────────────────────────────────────────────
 

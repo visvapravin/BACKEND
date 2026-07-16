@@ -24,7 +24,6 @@ public class LoginResponse {
     private Instant expiresAt;
     private Long userId;
     private String username;
-    private String displayName;
     private String email;
     private Long tenantId;
     private List<String> roles;

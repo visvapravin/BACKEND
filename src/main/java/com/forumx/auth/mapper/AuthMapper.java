@@ -42,6 +42,7 @@ public interface AuthMapper {
     @Mapping(target = "userRoles", ignore = true)
     @Mapping(target = "refreshTokens", ignore = true)
     @Mapping(target = "googleId", ignore = true)
+
     User toUser(RegisterRequest request);
 
     /**
@@ -59,20 +60,12 @@ public interface AuthMapper {
     @Mapping(target = "deleted", ignore = true)
     @Mapping(target = "deletedAt", ignore = true)
     @Mapping(target = "user", source = "user")
-    @Mapping(target = "firstName", ignore = true)
-    @Mapping(target = "lastName", ignore = true)
-    @Mapping(target = "displayName", ignore = true)
     @Mapping(target = "bio", ignore = true)
     @Mapping(target = "avatarUrl", ignore = true)
     @Mapping(target = "website", ignore = true)
     @Mapping(target = "githubUrl", ignore = true)
     @Mapping(target = "linkedinUrl", ignore = true)
-    @Mapping(target = "company", ignore = true)
-    @Mapping(target = "department", ignore = true)
-    @Mapping(target = "jobTitle", ignore = true)
     @Mapping(target = "location", ignore = true)
-    @Mapping(target = "timezone", ignore = true)
-    @Mapping(target = "locale", ignore = true)
     @Mapping(target = "dateOfBirth", ignore = true)
     @Mapping(target = "gender", ignore = true)
     @Mapping(target = "preferredLanguage", ignore = true)
@@ -88,7 +81,6 @@ public interface AuthMapper {
      */
     @Mapping(target = "userId", source = "id")
     @Mapping(target = "tenantId", source = "tenant.id")
-    @Mapping(target = "displayName", source = "userProfile.displayName")
     @Mapping(target = "accessToken", ignore = true)
     @Mapping(target = "refreshToken", ignore = true)
     @Mapping(target = "tokenType", ignore = true)

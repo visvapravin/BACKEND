@@ -41,7 +41,7 @@ import lombok.experimental.SuperBuilder;
         name = "users",
         uniqueConstraints = {
                 @UniqueConstraint(name = "uk_users_tenant_username", columnNames = {"tenant_id", "username"}),
-                @UniqueConstraint(name = "uk_users_tenant_email", columnNames = {"tenant_id", "email"})
+                @UniqueConstraint(name = "uk_users_email", columnNames = {"email"})
         },
         indexes = {
                 @Index(name = "idx_users_tenant_id", columnList = "tenant_id"),
@@ -82,9 +82,6 @@ public class User extends BaseEntity {
     @Column(name = "google_id", unique = true, length = 255)
     private String googleId;
 
-    @Size(max = 30)
-    @Column(name = "phone_number", length = 30)
-    private String phoneNumber;
 
     // ── Authentication state ────────────────────────────────────────────
 

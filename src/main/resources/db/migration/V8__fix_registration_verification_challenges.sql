@@ -1,0 +1,1 @@
+-- Placeholder migration for V8__fix_registration_verification_challenges

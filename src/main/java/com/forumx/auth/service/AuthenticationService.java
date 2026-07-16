@@ -39,6 +39,7 @@ import com.forumx.auth.passwordreset.repository.PasswordResetTokenRepository;
 import com.forumx.common.exception.PasswordMismatchException;
 import com.forumx.common.exception.PasswordReuseException;
 import com.forumx.common.exception.PasswordNotSetException;
+import com.forumx.common.exception.UsernameAlreadyExistsException;
 import com.forumx.auth.dto.request.GoogleLoginRequest;
 import org.springframework.web.util.UriComponentsBuilder;
 import org.springframework.beans.factory.annotation.Value;
@@ -116,10 +117,10 @@ public class AuthenticationService {
 
         if (userRepository.existsByTenantIdAndUsername(tenant.getId(), request.getUsername())) {
             log.warn("Username already exists in tenant: {}", request.getUsername());
-            throw new IllegalArgumentException("Username already exists");
+            throw new UsernameAlreadyExistsException("Username already exists");
         }
-        if (userRepository.existsByTenantIdAndEmail(tenant.getId(), request.getEmail())) {
-            log.warn("Email already exists in tenant: {}", request.getEmail());
+        if (userRepository.existsByEmail(request.getEmail())) {
+            log.warn("Email already exists: {}", request.getEmail());
             throw new IllegalArgumentException("Email already exists");
         }
 
@@ -129,7 +130,7 @@ public class AuthenticationService {
         User user = createUser(request, tenant, hashedPassword);
         userRepository.saveAndFlush(user);
 
-        createUserProfile(request, user);
+        createUserProfile(user);
         assignDefaultRole(user);
 
         // Generate verification token
@@ -279,12 +280,7 @@ public class AuthenticationService {
                 userRepository.saveAndFlush(user);
 
                 // Create UserProfile
-                RegisterRequest regReq = RegisterRequest.builder()
-                        .firstName(claims.firstName())
-                        .lastName(claims.lastName())
-                        .displayName(claims.fullName() != null ? claims.fullName() : username)
-                        .build();
-                UserProfile profile = createUserProfile(regReq, user);
+                UserProfile profile = createUserProfile(user);
                 user.setUserProfile(profile);
                 // Populate profile picture if provided
                 if (claims.pictureUrl() != null) {
@@ -388,16 +384,11 @@ public class AuthenticationService {
                 .filter(auth -> !auth.startsWith("ROLE_"))
                 .toList();
 
-        UserProfile profile = user.getUserProfile();
-
         return CurrentUserResponse.builder()
                 .userId(user.getId())
                 .username(user.getUsername())
                 .email(user.getEmail())
-                .phoneNumber(user.getPhoneNumber())
-                .displayName(profile != null ? profile.getDisplayName() : null)
-                .firstName(profile != null ? profile.getFirstName() : null)
-                .lastName(profile != null ? profile.getLastName() : null)
+
                 .tenantId(user.getTenant().getId())
                 .tenantSlug(user.getTenant().getSlug())
                 .active(user.getStatus() == User.UserStatus.ACTIVE)
@@ -482,27 +473,11 @@ public class AuthenticationService {
         user.setStatus(User.UserStatus.ACTIVE);
         user.setEnabled(true);
         user.setEmailVerified(false);
-        user.setPhoneNumber(request.getPhoneNumber());
         return user;
     }
 
-    /**
-     * Maps and saves the user profile details.
-     *
-     * @param request the registration request
-     * @param user    the parent User entity
-     * @return the saved UserProfile entity
-     */
-    private UserProfile createUserProfile(RegisterRequest request, User user) {
+    private UserProfile createUserProfile(User user) {
         UserProfile profile = authMapper.toUserProfile(user);
-        profile.setFirstName(request.getFirstName());
-        profile.setLastName(request.getLastName());
-        profile.setDisplayName(request.getDisplayName());
-        profile.setCompany(request.getCompany());
-        profile.setDepartment(request.getDepartment());
-        profile.setJobTitle(request.getJobTitle());
-        profile.setTimezone(request.getTimezone());
-        profile.setLocale(request.getLocale());
         return userProfileRepository.save(profile);
     }
 
@@ -872,7 +847,7 @@ public class AuthenticationService {
 
         log.info("Password reset successfully and refresh tokens revoked for user {}", user.getUsername());
         
-        // TODO: Expired and used verification/password reset tokens should later be cleaned using a scheduled job (e.g., Spring @Scheduled) or a database maintenance task.
+        // Note: Expired and used verification/password reset tokens are periodically cleaned up by TokenCleanupService.
     }
 
     /**

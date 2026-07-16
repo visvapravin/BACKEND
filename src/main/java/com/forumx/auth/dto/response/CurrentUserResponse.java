@@ -24,13 +24,7 @@ public class CurrentUserResponse {
     private Long userId;
     private String username;
     private String email;
-    private String phoneNumber;
 
-    // ── Profile ─────────────────────────────────────────────────────────
-
-    private String displayName;
-    private String firstName;
-    private String lastName;
 
     // ── Tenant ──────────────────────────────────────────────────────────
 

@@ -79,9 +79,6 @@ public class JwtTokenProvider {
 
             if (customUserDetails.getUser() != null) {
                 extraClaims.put(JwtClaimsConstants.EMAIL, customUserDetails.getUser().getEmail());
-                if (customUserDetails.getUser().getUserProfile() != null) {
-                    extraClaims.put(JwtClaimsConstants.DISPLAY_NAME, customUserDetails.getUser().getUserProfile().getDisplayName());
-                }
             }
 
             Collection<? extends GrantedAuthority> authorities = customUserDetails.getAuthorities();

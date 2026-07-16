@@ -83,9 +83,6 @@ public class EmailVerificationTest {
                 .email(email)
                 .password("SecurePassword123!")
                 .confirmPassword("SecurePassword123!")
-                .firstName("Test")
-                .lastName("User")
-                .displayName("Test User")
                 .build();
 
         mockMvc.perform(post("/api/v1/auth/register")

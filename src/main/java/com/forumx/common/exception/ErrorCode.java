@@ -4,6 +4,7 @@ public enum ErrorCode {
 
     VALIDATION_ERROR("Validation failed"),
     USER_ALREADY_EXISTS("User already exists"),
+    USERNAME_ALREADY_EXISTS("Username already exists"),
     USER_NOT_FOUND("User not found"),
     INVALID_CREDENTIALS("Invalid credentials"),
     ACCESS_DENIED("Access denied"),
@@ -19,7 +20,8 @@ public enum ErrorCode {
     TENANT_NOT_FOUND("Tenant not found"),
     PASSWORDS_DO_NOT_MATCH("Passwords do not match"),
     PASSWORD_REUSE("Cannot reset password to the current password"),
-    PASSWORD_NOT_SET("This account currently uses Google Sign-In. Create a password to enable email login.");
+    PASSWORD_NOT_SET("This account currently uses Google Sign-In. Create a password to enable email login."),
+    DOMAIN_INTEGRITY_VIOLATION("Domain integrity violation or database corruption detected");
 
     private final String defaultMessage;
 

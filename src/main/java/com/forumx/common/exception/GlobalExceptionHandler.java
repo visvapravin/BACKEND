@@ -478,6 +478,31 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * Handles UsernameAlreadyExistsException.
+     */
+    @ExceptionHandler(UsernameAlreadyExistsException.class)
+    public ResponseEntity<ApiResponse<ErrorResponse>> handleUsernameAlreadyExists(
+            UsernameAlreadyExistsException ex,
+            WebRequest request
+    ) {
+        String path = resolvePath(request);
+        String requestId = resolveRequestId(request);
+        log.warn(formatLogMessage(request, "Username already exists: " + ex.getMessage()));
+
+        ErrorResponse errorResponse = buildErrorResponse(
+                ErrorCode.USERNAME_ALREADY_EXISTS,
+                ex.getMessage(),
+                path,
+                requestId,
+                null
+        );
+
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(ApiResponse.error(ex.getMessage(), errorResponse, path));
+    }
+
+    /**
      * Handles PasswordMismatchException.
      */
     @ExceptionHandler(PasswordMismatchException.class)
@@ -550,6 +575,31 @@ public class GlobalExceptionHandler {
         return ResponseEntity
                 .status(HttpStatus.FORBIDDEN)
                 .body(ApiResponse.error(ex.getMessage(), errorResponse, path));
+    }
+
+    /**
+     * Handles DomainIntegrityException for backend data corruption or invariants violation.
+     */
+    @ExceptionHandler(DomainIntegrityException.class)
+    public ResponseEntity<ApiResponse<ErrorResponse>> handleDomainIntegrity(
+            DomainIntegrityException ex,
+            WebRequest request
+    ) {
+        String path = resolvePath(request);
+        String requestId = resolveRequestId(request);
+        log.error(formatLogMessage(request, "Domain integrity violation: " + ex.getMessage()), ex);
+
+        ErrorResponse errorResponse = buildErrorResponse(
+                ErrorCode.DOMAIN_INTEGRITY_VIOLATION,
+                ex.getMessage(),
+                path,
+                requestId,
+                null
+        );
+
+        return ResponseEntity
+                .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(ApiResponse.error("Internal server error", errorResponse, path));
     }
 
     /**

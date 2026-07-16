@@ -1,0 +1,1 @@
+-- Placeholder migration for V10__rebuild_user_profiles

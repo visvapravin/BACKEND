@@ -1,0 +1,1 @@
+-- Placeholder migration for V9__fix_user_profiles_columns

@@ -1,0 +1,1 @@
+-- Placeholder migration for V7__registration_verification_challenges

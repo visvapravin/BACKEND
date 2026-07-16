@@ -41,41 +41,4 @@ public class RegisterRequest {
 
     @NotBlank(message = "Password confirmation is required")
     private String confirmPassword;
-
-    // ── Profile ─────────────────────────────────────────────────────────
-
-    @NotBlank(message = "First name is required")
-    @Size(max = 100, message = "First name must not exceed 100 characters")
-    private String firstName;
-
-    @NotBlank(message = "Last name is required")
-    @Size(max = 100, message = "Last name must not exceed 100 characters")
-    private String lastName;
-
-    @NotBlank(message = "Display name is required")
-    @Size(max = 100, message = "Display name must not exceed 100 characters")
-    private String displayName;
-
-    @Pattern(regexp = "^\\+?[0-9]{7,15}$", message = "Phone number must contain 7 to 15 digits and may start with +")
-    @Size(max = 30, message = "Phone number must not exceed 30 characters")
-    private String phoneNumber;
-
-    // ── Professional (stored in UserProfile) ────────────────────────────
-
-    @Size(max = 150, message = "Company must not exceed 150 characters")
-    private String company;
-
-    @Size(max = 100, message = "Department must not exceed 100 characters")
-    private String department;
-
-    @Size(max = 100, message = "Job title must not exceed 100 characters")
-    private String jobTitle;
-
-    // ── Regional (stored in UserProfile) ────────────────────────────────
-
-    @Size(max = 50, message = "Timezone must not exceed 50 characters")
-    private String timezone;
-
-    @Size(max = 10, message = "Locale must not exceed 10 characters")
-    private String locale;
 }
