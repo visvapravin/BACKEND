@@ -15,13 +15,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
-@SecurityScheme(
-        name = OpenApiConfiguration.JWT_SECURITY_SCHEME,
-        type = SecuritySchemeType.HTTP,
-        scheme = "bearer",
-        bearerFormat = "JWT",
-        in = SecuritySchemeIn.HEADER
-)
+@SecurityScheme(name = OpenApiConfiguration.JWT_SECURITY_SCHEME, type = SecuritySchemeType.HTTP, scheme = "bearer", bearerFormat = "JWT", in = SecuritySchemeIn.HEADER)
 public class OpenApiConfiguration {
 
     static final String JWT_SECURITY_SCHEME = "bearerAuth";
@@ -44,11 +38,15 @@ public class OpenApiConfiguration {
 
     @Bean
     public OpenApiCustomizer globalResponsesCustomiser() {
-        return openApi -> openApi.getPaths().values().forEach(pathItem -> pathItem.readOperations().forEach(operation -> {
-            operation.getResponses().addApiResponse("401", new io.swagger.v3.oas.models.responses.ApiResponse().description("Unauthorized"));
-            operation.getResponses().addApiResponse("403", new io.swagger.v3.oas.models.responses.ApiResponse().description("Forbidden"));
-            operation.getResponses().addApiResponse("500", new io.swagger.v3.oas.models.responses.ApiResponse().description("Internal Server Error"));
-        }));
+        return openApi -> openApi.getPaths().values()
+                .forEach(pathItem -> pathItem.readOperations().forEach(operation -> {
+                    operation.getResponses().addApiResponse("401",
+                            new io.swagger.v3.oas.models.responses.ApiResponse().description("Unauthorized"));
+                    operation.getResponses().addApiResponse("403",
+                            new io.swagger.v3.oas.models.responses.ApiResponse().description("Forbidden"));
+                    operation.getResponses().addApiResponse("500",
+                            new io.swagger.v3.oas.models.responses.ApiResponse().description("Internal Server Error"));
+                }));
     }
 
     @Bean
@@ -58,7 +56,7 @@ public class OpenApiConfiguration {
 
     @Bean
     public GroupedOpenApi userApi() {
-        return groupedApi("user", "com.forumx.modules.user.controller");
+        return groupedApi("user", "com.forumx.user.controller");
     }
 
     @Bean
@@ -68,27 +66,37 @@ public class OpenApiConfiguration {
 
     @Bean
     public GroupedOpenApi answerApi() {
-        return groupedApi("answer", "com.forumx.modules.answer.controller");
+        return groupedApi("answer", "com.forumx.answer.controller");
     }
 
     @Bean
     public GroupedOpenApi commentApi() {
-        return groupedApi("comment", "com.forumx.modules.comment.controller");
+        return groupedApi("comment", "com.forumx.comment.controller");
     }
 
     @Bean
     public GroupedOpenApi voteApi() {
-        return groupedApi("vote", "com.forumx.modules.vote.controller");
+        return groupedApi("vote", "com.forumx.vote.controller");
     }
 
     @Bean
     public GroupedOpenApi notificationApi() {
-        return groupedApi("notification", "com.forumx.modules.notification.controller");
+        return groupedApi("notification", "com.forumx.notification.controller");
+    }
+
+    @Bean
+    public GroupedOpenApi moderationApi() {
+        return groupedApi("moderation", "com.forumx.moderation.controller");
     }
 
     @Bean
     public GroupedOpenApi bookmarkApi() {
-        return groupedApi("bookmark", "com.forumx.modules.bookmark.controller");
+        return groupedApi("bookmark", "com.forumx.bookmark.controller");
+    }
+
+    @Bean
+    public GroupedOpenApi supportApi() {
+        return groupedApi("support", "com.forumx.support.ticket.controller");
     }
 
     @Bean
@@ -103,7 +111,11 @@ public class OpenApiConfiguration {
 
     @Bean
     public GroupedOpenApi searchApi() {
-        return groupedApi("search", "com.forumx.modules.search.controller");
+        return GroupedOpenApi.builder()
+                .group("search")
+                .pathsToMatch("/api/v1/search/**")
+                .addOpenApiCustomizer(globalResponsesCustomiser())
+                .build();
     }
 
     @Bean

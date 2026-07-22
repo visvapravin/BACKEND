@@ -59,10 +59,17 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             new AntPathRequestMatcher("/api/v1/auth/forgot-password"),
             new AntPathRequestMatcher("/api/v1/auth/reset-password"),
             new AntPathRequestMatcher("/api/v1/auth/google"),
-            new AntPathRequestMatcher("/swagger-ui/**"),
             new AntPathRequestMatcher("/swagger-ui.html"),
-            new AntPathRequestMatcher("/api-docs/**"),
+            new AntPathRequestMatcher("/swagger-ui/**"),
+            new AntPathRequestMatcher("/swagger-ui*"),
+            new AntPathRequestMatcher("/v3/api-docs"),
             new AntPathRequestMatcher("/v3/api-docs/**"),
+            new AntPathRequestMatcher("/v3/api-docs*"),
+            new AntPathRequestMatcher("/api-docs/**"),
+            new AntPathRequestMatcher("/swagger-resources"),
+            new AntPathRequestMatcher("/swagger-resources/**"),
+            new AntPathRequestMatcher("/webjars/**"),
+            new AntPathRequestMatcher("/ws/**"),
             new AntPathRequestMatcher("/actuator/health")
     );
 

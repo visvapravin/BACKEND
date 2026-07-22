@@ -76,4 +76,21 @@ public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificat
             WHERE u.id = :userId AND u.deleted = false
             """)
     Optional<User> findByIdWithFullProfile(@Param("userId") Long userId);
+
+    @Query("""
+            SELECT DISTINCT u FROM User u
+            JOIN u.userRoles ur
+            JOIN ur.role r
+            WHERE u.tenant.id = :tenantId
+              AND u.deleted = false
+              AND u.enabled = true
+              AND ur.deleted = false
+              AND ur.active = true
+              AND (ur.expiresAt IS NULL OR ur.expiresAt > CURRENT_TIMESTAMP)
+              AND r.deleted = false
+              AND r.active = true
+              AND r.roleName IN (:roleNames)
+            """)
+    List<User> findUsersByTenantIdAndRoles(@Param("tenantId") Long tenantId,
+                                           @Param("roleNames") java.util.Collection<com.forumx.auth.enums.RoleType> roleNames);
 }

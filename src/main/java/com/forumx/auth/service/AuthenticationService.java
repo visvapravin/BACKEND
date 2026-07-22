@@ -88,6 +88,7 @@ public class AuthenticationService {
     private final TenantResolver tenantResolver;
     private final PasswordResetTokenRepository passwordResetTokenRepository;
     private final GoogleTokenVerifierService googleTokenVerifierService;
+    private final com.forumx.notification.publisher.NotificationPublisher notificationPublisher;
 
     @Value("${app.frontend.base-url}")
     private String frontendBaseUrl;
@@ -153,9 +154,19 @@ public class AuthenticationService {
         String message = "Registration successful. Please verify your email.";
 
         try {
-            emailService.sendVerificationEmail(user.getEmail(), user.getUsername(), verificationUrl);
+            com.forumx.notification.dto.NotificationEvent notificationEvent = new com.forumx.notification.dto.NotificationEvent(
+                    java.util.UUID.randomUUID(),
+                    tenant.getId(),
+                    user.getId(),
+                    user.getEmail(),
+                    user.getUsername(),
+                    verificationUrl,
+                    "REGISTRATION_VERIFICATION",
+                    java.time.Instant.now()
+            );
+            notificationPublisher.publish(notificationEvent);
         } catch (Exception e) {
-            log.error("Failed to send verification email during registration for username={}", user.getUsername(), e);
+            log.error("Failed to publish verification email during registration for username={}", user.getUsername(), e);
             message = "Registration successful, but verification email delivery failed. Please request a new verification email.";
         }
 
@@ -701,7 +712,17 @@ public class AuthenticationService {
                 .toUriString();
 
         try {
-            emailService.sendVerificationEmail(user.getEmail(), user.getUsername(), verificationUrl);
+            com.forumx.notification.dto.NotificationEvent notificationEvent = new com.forumx.notification.dto.NotificationEvent(
+                    java.util.UUID.randomUUID(),
+                    tenantId,
+                    user.getId(),
+                    user.getEmail(),
+                    user.getUsername(),
+                    verificationUrl,
+                    "REGISTRATION_VERIFICATION",
+                    java.time.Instant.now()
+            );
+            notificationPublisher.publish(notificationEvent);
         } catch (Exception e) {
             log.error("Failed to resend verification email for username={}", user.getUsername(), e);
             throw new RuntimeException("Email delivery failed", e);

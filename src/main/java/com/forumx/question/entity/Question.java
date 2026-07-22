@@ -24,6 +24,10 @@ import lombok.Setter;
 import lombok.experimental.SuperBuilder;
 import org.hibernate.annotations.DynamicInsert;
 import org.hibernate.annotations.DynamicUpdate;
+import com.forumx.answer.entity.Answer;
+import jakarta.persistence.OneToMany;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Entity representing a question post.
@@ -131,5 +135,25 @@ public class Question extends BaseEntity {
     @Column(name = "locked", nullable = false)
     private boolean locked = false;
 
+    /**
+     * The list of answers associated with this question.
+     */
+    @OneToMany(
+            mappedBy = "question",
+            fetch = FetchType.LAZY
+    )
+    @Builder.Default
+    private List<Answer> answers = new ArrayList<>();
 
+    public boolean canReceiveComments() {
+        return !isDeleted();
+    }
+
+    public boolean canReceiveVotes() {
+        return !isDeleted() && status != QuestionStatus.CLOSED;
+    }
+
+    public boolean canBeReported() {
+        return !isDeleted();
+    }
 }

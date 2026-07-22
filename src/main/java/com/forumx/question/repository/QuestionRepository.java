@@ -6,10 +6,13 @@ import java.util.Optional;
 
 import com.forumx.question.entity.Question;
 import com.forumx.question.entity.QuestionStatus;
+import com.forumx.question.dto.response.SearchResultResponse;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 /**
@@ -127,4 +130,31 @@ public interface QuestionRepository extends JpaRepository<Question, Long>, JpaSp
      * @return list of matching questions
      */
     List<Question> findAllByIdInAndTenantIdAndDeletedFalse(Collection<Long> ids, Long tenantId);
+
+    @Query("""
+        SELECT new com.forumx.question.dto.response.SearchResultResponse(
+            q.id,
+            q.title,
+            q.content,
+            q.author.username,
+            q.voteScore,
+            q.answerCount,
+            q.createdAt
+        )
+        FROM Question q
+        WHERE q.tenant.id = :tenantId
+          AND q.deleted = false
+          AND q.author.deleted = false
+          AND q.author.enabled = true
+          AND (
+              LOWER(q.title) LIKE LOWER(CONCAT('%', :keyword, '%'))
+              OR LOWER(q.content) LIKE LOWER(CONCAT('%', :keyword, '%'))
+              OR LOWER(q.author.username) LIKE LOWER(CONCAT('%', :keyword, '%'))
+          )
+    """)
+    Page<SearchResultResponse> searchByKeyword(
+            @Param("tenantId") Long tenantId,
+            @Param("keyword") String keyword,
+            Pageable pageable
+    );
 }

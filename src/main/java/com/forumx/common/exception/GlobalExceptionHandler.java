@@ -203,6 +203,56 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * Handles InvalidReportStateException for report status modification violations.
+     */
+    @ExceptionHandler(InvalidReportStateException.class)
+    public ResponseEntity<ApiResponse<ErrorResponse>> handleInvalidReportState(
+            InvalidReportStateException ex,
+            WebRequest request
+    ) {
+        String path = resolvePath(request);
+        String requestId = resolveRequestId(request);
+        log.warn(formatLogMessage(request, "Invalid report state: " + ex.getMessage()));
+
+        ErrorResponse errorResponse = buildErrorResponse(
+                ErrorCode.BAD_REQUEST,
+                ex.getMessage(),
+                path,
+                requestId,
+                null
+        );
+
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error(ex.getMessage(), errorResponse, path));
+    }
+
+    /**
+     * Handles InvalidSearchQueryException.
+     */
+    @ExceptionHandler(InvalidSearchQueryException.class)
+    public ResponseEntity<ApiResponse<ErrorResponse>> handleInvalidSearchQuery(
+            InvalidSearchQueryException ex,
+            WebRequest request
+    ) {
+        String path = resolvePath(request);
+        String requestId = resolveRequestId(request);
+        log.warn(formatLogMessage(request, "Invalid search query: " + ex.getMessage()));
+
+        ErrorResponse errorResponse = buildErrorResponse(
+                ErrorCode.BAD_REQUEST,
+                ex.getMessage(),
+                path,
+                requestId,
+                null
+        );
+
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error(ex.getMessage(), errorResponse, path));
+    }
+
+    /**
      * Handles BadCredentialsException for authentication failures.
      */
     @ExceptionHandler(BadCredentialsException.class)
@@ -463,6 +513,31 @@ public class GlobalExceptionHandler {
         String path = resolvePath(request);
         String requestId = resolveRequestId(request);
         log.warn(formatLogMessage(request, "Already verified: " + ex.getMessage()));
+
+        ErrorResponse errorResponse = buildErrorResponse(
+                ErrorCode.BAD_REQUEST,
+                ex.getMessage(),
+                path,
+                requestId,
+                null
+        );
+
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error(ex.getMessage(), errorResponse, path));
+    }
+
+    /**
+     * Handles TicketClosedException.
+     */
+    @ExceptionHandler(TicketClosedException.class)
+    public ResponseEntity<ApiResponse<ErrorResponse>> handleTicketClosed(
+            TicketClosedException ex,
+            WebRequest request
+    ) {
+        String path = resolvePath(request);
+        String requestId = resolveRequestId(request);
+        log.warn(formatLogMessage(request, "Ticket closed restriction: " + ex.getMessage()));
 
         ErrorResponse errorResponse = buildErrorResponse(
                 ErrorCode.BAD_REQUEST,

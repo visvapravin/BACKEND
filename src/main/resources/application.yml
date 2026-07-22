@@ -1,20 +1,36 @@
+# ---------------------------------------------------------------
+# ForumX – Primary Configuration (Cloud-First)
+# ---------------------------------------------------------------
+# This is the single source of truth for all configuration.
+# All cloud services (Neon, Upstash, CloudAMQP, Gmail) are
+# configured here as production defaults.
+#
+# For local development without cloud services, activate the
+# dev profile:  --spring.profiles.active=dev
+# ---------------------------------------------------------------
+
 spring:
   autoconfigure:
     exclude:
       - org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration
   application:
     name: ForumX
+
+  # ---------------------------------------------------------------
+  # Database – Neon PostgreSQL
+  # ---------------------------------------------------------------
   datasource:
     type: com.zaxxer.hikari.HikariDataSource
-    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:forumx}}
-    username: ${SPRING_DATASOURCE_USERNAME:${DB_USERNAME:forumx}}
-    password: ${SPRING_DATASOURCE_PASSWORD:${DB_PASSWORD:forumx}}
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
     driver-class-name: org.postgresql.Driver
     hikari:
       pool-name: ForumXHikariPool
       maximum-pool-size: ${DB_POOL_MAX_SIZE:10}
       minimum-idle: ${DB_POOL_MIN_IDLE:2}
       connection-timeout: ${DB_POOL_CONNECTION_TIMEOUT:30000}
+
   jpa:
     open-in-view: false
     hibernate:
@@ -31,15 +47,31 @@ spring:
         persistence:
           validation:
             mode: auto
+
   flyway:
     enabled: true
     locations: classpath:db/migration
-  data:
-    redis:
-      host: ${REDIS_HOST:localhost}
-      port: ${REDIS_PORT:6379}
-      password: ${REDIS_PASSWORD:}
-      timeout: ${REDIS_TIMEOUT:5s}
+
+  # ---------------------------------------------------------------
+  # Message Broker – CloudAMQP (RabbitMQ with TLS)
+  # ---------------------------------------------------------------
+
+  # ---------------------------------------------------------------
+  # Email – Gmail SMTP
+  # ---------------------------------------------------------------
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: backendforumx@gmail.com
+    password: mjywpgfutvcpibes
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+
+  # Kafka is disabled; config kept for future use
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     consumer:
@@ -49,43 +81,22 @@ spring:
       properties:
         spring.json.trusted.packages: com.forumx
     producer:
-      retries: ${KAFKA_PRODUCER_RETRIES:3}
+      retries: 3
       acks: all
       properties:
-        linger.ms: ${KAFKA_PRODUCER_LINGER_MS:5}
+        linger.ms: 5
         enable.idempotence: true
     admin:
       fail-fast: true
-  rabbitmq:
-    host: ${RABBITMQ_HOST:localhost}
-    port: ${RABBITMQ_PORT:5672}
-    username: ${RABBITMQ_USERNAME:guest}
-    password: ${RABBITMQ_PASSWORD:guest}
-    virtual-host: ${RABBITMQ_VHOST:/}
-    publisher-confirm-type: correlated
-    publisher-returns: true
-    template:
-      mandatory: true
-    listener:
-      simple:
-        default-requeue-rejected: false
-        acknowledge-mode: auto
+
   servlet:
     multipart:
       max-file-size: ${MULTIPART_MAX_FILE_SIZE:10MB}
       max-request-size: ${MULTIPART_MAX_REQUEST_SIZE:10MB}
-  mail:
-    host: ${SPRING_MAIL_HOST:localhost}
-    port: ${SPRING_MAIL_PORT:1025}
-    username: ${SPRING_MAIL_USERNAME:}
-    password: ${SPRING_MAIL_PASSWORD:}
-    properties:
-      mail:
-        smtp:
-          auth: ${SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH:true}
-          starttls:
-            enable: ${SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE:true}
 
+# ---------------------------------------------------------------
+# Server
+# ---------------------------------------------------------------
 server:
   port: ${SERVER_PORT:8080}
   shutdown: graceful
@@ -96,6 +107,11 @@ server:
     whitelabel:
       enabled: false
 
+# ---------------------------------------------------------------
+# Actuator – Health, Metrics
+# Spring Boot auto-detects LettuceConnectionFactory and exposes
+# redis health via RedisHealthContributorAutoConfiguration.
+# ---------------------------------------------------------------
 management:
   endpoints:
     web:
@@ -108,6 +124,9 @@ management:
     probes:
       enabled: true
 
+# ---------------------------------------------------------------
+# Swagger / OpenAPI
+# ---------------------------------------------------------------
 springdoc:
   api-docs:
     path: /api-docs
@@ -122,45 +141,84 @@ springdoc:
     display-operation-id: true
     disable-swagger-default-url: true
 
+# ---------------------------------------------------------------
+# Application – Security, Frontend, JWT
+# ---------------------------------------------------------------
 app:
   google:
-    client-id: ${GOOGLE_CLIENT_ID}
+    client-id: 924087041522-fqdejb0kii9a98v34ci0bslm50iesq61.apps.googleusercontent.com
   security:
     jwt:
-      secret: ${JWT_SECRET:change-me-in-production-use-a-secure-base64-encoded-key-with-256-bits}
-      issuer: ${JWT_ISSUER:forumx-auth-service}
-      access-token-expiration: ${JWT_ACCESS_TOKEN_EXPIRATION:15m}
-      refresh-token-expiration: ${JWT_REFRESH_TOKEN_EXPIRATION:7d}
+      secret: QXOD/DAudr+HAihW+OyEhRlp47+XzvBpLrPzbNTbDhR7MqQSTxSImzckXajMAWTjsECRmHJXbyM4IGuLCgqZqQ==
+      issuer: ForumX
+      access-token-expiration: 15m
+      refresh-token-expiration: 7d
   frontend:
     base-url: ${APP_FRONTEND_BASE_URL:http://localhost:3000}
-    verification-path: ${APP_FRONTEND_VERIFICATION_PATH:/verify-email}
-    reset-password-path: ${APP_FRONTEND_RESET_PASSWORD_PATH:/reset-password}
+    verification-path: /verify-email
+    reset-password-path: /reset-password
   verification:
-    token-expiration: ${APP_VERIFICATION_TOKEN_EXPIRATION:24h}
+    token-expiration: 24h
   password-reset:
-    token-expiration: ${APP_PASSWORD_RESET_TOKEN_EXPIRATION:30m}
+    token-expiration: 30m
+
+# ---------------------------------------------------------------
+# ForumX – Module Configuration
+# ---------------------------------------------------------------
+forumx:
+  # Redis – Upstash (Lettuce + TLS + connection pooling)
+  # RedisConfig reads ONLY from forumx.redis.* via RedisProperties.
+  # spring.data.redis.* is NOT used (we build LettuceConnectionFactory manually).
   redis:
+    enabled: true
+    host: national-liger-179032.upstash.io
+    port: 6379
+    password: gQAAAAAAArtYAAIgcDFjNjJiZjM4NzM1YTI0MzU1ODM5MDQ5YWZjZmJjNmMyOA
+    ssl: true
+    database: 0
+    timeout: 5s
     cache:
-      ttl: ${REDIS_CACHE_TTL:60m}
-      key-prefix: ${REDIS_CACHE_KEY_PREFIX:forumx:cache:}
+      ttl: 60m
+      key-prefix: "forumx:cache:"
+    pool:
+      max-active: 16
+      max-idle: 8
+      min-idle: 2
+      max-wait: 2s
+
+  websocket:
+    allowed-origins: ${WEBSOCKET_ALLOWED_ORIGINS:http://localhost:5173}
+
+  messaging:
+    enabled: true
+    host: puffin.rmq2.cloudamqp.com
+    port: 5671
+    username: bjqdpchc
+    password: VvSBPPtPyxwK1pBMcqVQGIFGVlaa-8f5
+    virtual-host: bjqdpchc
+    ssl: true
+    publisher-confirm-type: correlated
+    publisher-returns: true
+
   rabbitmq:
     exchange:
-      name: ${RABBITMQ_EXCHANGE:forumx.events.exchange}
+      name: forumx.events.exchange
     retry-exchange:
-      name: ${RABBITMQ_RETRY_EXCHANGE:forumx.retry.exchange}
+      name: forumx.retry.exchange
     dead-letter-exchange:
-      name: ${RABBITMQ_DLQ_EXCHANGE:forumx.dlx.exchange}
+      name: forumx.dlx.exchange
     queues:
-      notification: ${RABBITMQ_NOTIFICATION_QUEUE:forumx.notification.queue}
-      email: ${RABBITMQ_EMAIL_QUEUE:forumx.email.queue}
-      retry: ${RABBITMQ_RETRY_QUEUE:forumx.retry.queue}
-      dead-letter: ${RABBITMQ_DLQ:forumx.dead-letter.queue}
+      notification: forumx.notification.queue
+      email: forumx.email.queue
+      retry: forumx.retry.queue
+      dead-letter: forumx.dead-letter.queue
     routing-keys:
-      notification: ${RABBITMQ_NOTIFICATION_ROUTING_KEY:forumx.notification}
-      email: ${RABBITMQ_EMAIL_ROUTING_KEY:forumx.email}
-      retry: ${RABBITMQ_RETRY_ROUTING_KEY:forumx.retry}
-      dead-letter: ${RABBITMQ_DLQ_ROUTING_KEY:forumx.dead-letter}
-    retry-ttl: ${RABBITMQ_RETRY_TTL:5m}
+      notification: forumx.notification
+      email: forumx.email
+      retry: forumx.retry
+      dead-letter: forumx.dead-letter
+    retry-ttl: 5m
+
   kafka:
     enabled: false
     topics:
@@ -169,22 +227,35 @@ app:
       retry: ${KAFKA_RETRY_TOPIC:forumx.retry}
       dlq: ${KAFKA_DLQ_TOPIC:forumx.dlq}
     retry:
-      attempts: ${KAFKA_RETRY_ATTEMPTS:3}
-      delay-ms: ${KAFKA_RETRY_DELAY_MS:5000}
+      attempts: 3
+      delay-ms: 5000
     consumer:
       group-id: ${KAFKA_CONSUMER_GROUP_ID:forumx-consumer-group}
 
+# ---------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------
 logging:
   level:
-    root: ${LOG_LEVEL_ROOT:INFO}
-    com.forumx: ${LOG_LEVEL_APP:INFO}
-    org.springframework.web: ${LOG_LEVEL_WEB:WARN}
-    org.hibernate.SQL: ${LOG_LEVEL_HIBERNATE_SQL:WARN}
-    org.hibernate.orm.jdbc.bind: ${LOG_LEVEL_HIBERNATE_BIND:WARN}
+    root: INFO
+    com.forumx: INFO
+    org.springframework.web: WARN
+    org.hibernate.SQL: WARN
+    org.hibernate.orm.jdbc.bind: WARN
+    io.lettuce.core: WARN
   pattern:
-    console: ${LOG_PATTERN_CONSOLE:%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger{36} - %msg%n}
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger{36} - %msg%n"
 
 ---
+# ---------------------------------------------------------------
+# Dev Profile – local-development overrides
+# ---------------------------------------------------------------
+# Activate with: --spring.profiles.active=dev
+#
+# Disables cloud services (Redis, RabbitMQ) so the application
+# can run offline without any external dependencies.
+# InMemoryRedisGateway is used automatically when Redis is disabled.
+# ---------------------------------------------------------------
 spring:
   config:
     activate:
@@ -194,8 +265,6 @@ spring:
       - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
       - org.springframework.boot.autoconfigure.amqp.RabbitAutoConfiguration
       - org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration
-  flyway:
-    enabled: true
   cache:
     type: none
   jpa:
@@ -211,8 +280,10 @@ spring:
     livereload:
       enabled: true
 
-app:
-  kafka:
+forumx:
+  redis:
+    enabled: false   # Use InMemoryRedisGateway; tests override via @DynamicPropertySource
+  messaging:
     enabled: false
 
 server:
@@ -237,38 +308,3 @@ logging:
     org.springframework.web: INFO
     org.hibernate.SQL: DEBUG
     org.hibernate.orm.jdbc.bind: TRACE
-
----
-spring:
-  config:
-    activate:
-      on-profile: prod
-  jpa:
-    show-sql: false
-  servlet:
-    multipart:
-      max-file-size: ${MULTIPART_MAX_FILE_SIZE:10MB}
-      max-request-size: ${MULTIPART_MAX_REQUEST_SIZE:10MB}
-
-server:
-  error:
-    include-message: never
-    include-binding-errors: never
-    include-stacktrace: never
-
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health,info,metrics,env,loggers
-  endpoint:
-    health:
-      show-details: never
-
-logging:
-  level:
-    root: INFO
-    com.forumx: INFO
-    org.springframework.web: WARN
-    org.hibernate.SQL: WARN
-    org.hibernate.orm.jdbc.bind: WARN

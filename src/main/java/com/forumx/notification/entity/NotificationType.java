@@ -1,0 +1,29 @@
+package com.forumx.notification.entity;
+
+/** Types of notifications currently supported by ForumX. */
+public enum NotificationType {
+    EMAIL_VERIFICATION,
+    PASSWORD_RESET,
+    NEW_QUESTION,
+    NEW_ANSWER,
+    NEW_COMMENT,
+    NEW_REPLY,
+    NEW_MENTION,
+    NEW_VOTE,
+    ANSWER_CREATED,
+    QUESTION_COMMENTED,
+    QUESTION_MENTION,
+    ANSWER_MENTION,
+    VOTE_RECEIVED,
+    QUESTION_UPVOTED,
+    ANSWER_UPVOTED,
+    COMMENT_UPVOTED,
+    SYSTEM,
+    TICKET_CREATED,
+    TICKET_MESSAGE,
+    CONTENT_REPORTED,
+    REPORT_CREATED,
+    REPORT_ASSIGNED,
+    REPORT_RESOLVED,
+    REPORT_REJECTED
+}

@@ -1,6 +1,8 @@
 package com.forumx.security.config;
 
+import com.forumx.security.filter.JwtAuthenticationFilter;
 import jakarta.servlet.Filter;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -47,6 +49,8 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         return http
                 .csrf(AbstractHttpConfigurer::disable)
+                .formLogin(AbstractHttpConfigurer::disable)
+                .httpBasic(AbstractHttpConfigurer::disable)
                 .cors(Customizer.withDefaults())
                 .headers(headers -> headers
                         .frameOptions(HeadersConfigurer.FrameOptionsConfig::disable)
@@ -58,6 +62,7 @@ public class SecurityConfig {
                         .authenticationEntryPoint(authenticationEntryPoint)
                 )
                 .authorizeHttpRequests(auth -> auth
+                        // Auth Public Endpoints
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/register").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/login").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/refresh").permitAll()
@@ -67,17 +72,45 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/forgot-password").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/reset-password").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/google").permitAll()
-                        .requestMatchers("/api-docs/**").permitAll()
-                        .requestMatchers("/v3/api-docs/**").permitAll()
-                        .requestMatchers("/swagger-ui/**").permitAll()
-                        .requestMatchers("/swagger-ui.html").permitAll()
+
+                        // Swagger / OpenAPI Endpoints
+                        .requestMatchers(
+                                "/swagger-ui.html",
+                                "/swagger-ui/**",
+                                "/swagger-ui*",
+                                "/v3/api-docs",
+                                "/v3/api-docs/**",
+                                "/v3/api-docs*",
+                                "/api-docs/**",
+                                "/swagger-resources",
+                                "/swagger-resources/**",
+                                "/webjars/**"
+                        ).permitAll()
+
+                        // Public Infrastructure & Test Endpoints
+                        .requestMatchers("/ws/**").permitAll()
                         .requestMatchers("/actuator/health").permitAll()
+                        .requestMatchers("/api/test/**").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/test/notification").permitAll()
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+
+                        // All other endpoints require JWT authentication
                         .anyRequest().authenticated()
                 )
                 .authenticationProvider(authenticationProvider())
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .build();
+    }
+
+    /**
+     * Prevents Spring Boot from registering JwtAuthenticationFilter twice (once in the main Servlet container filter
+     * chain and once in the Spring Security FilterChain).
+     */
+    @Bean
+    public FilterRegistrationBean<JwtAuthenticationFilter> jwtFilterRegistrationBean(JwtAuthenticationFilter filter) {
+        FilterRegistrationBean<JwtAuthenticationFilter> registration = new FilterRegistrationBean<>(filter);
+        registration.setEnabled(false);
+        return registration;
     }
 
     @Bean
