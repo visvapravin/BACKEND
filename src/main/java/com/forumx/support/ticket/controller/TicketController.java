@@ -1,5 +1,8 @@
 package com.forumx.support.ticket.controller;
 
+import com.forumx.auth.repository.UserRepository;
+import com.forumx.security.facade.AuthenticationFacade;
+import com.forumx.security.model.CustomUserDetails;
 import com.forumx.support.ticket.dto.request.AssignTicketRequest;
 import com.forumx.support.ticket.dto.request.CreateTicketRequest;
 import com.forumx.support.ticket.dto.request.UpdateTicketStatusRequest;
@@ -30,6 +33,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class TicketController {
 
     private final TicketService ticketService;
+    private final AuthenticationFacade authenticationFacade;
 
     @PostMapping
     @Operation(summary = "Create support ticket")
@@ -58,9 +62,18 @@ public class TicketController {
     }
 
     @PutMapping("/{ticketId}/assign")
-    @Operation(summary = "Assign support ticket")
+    @Operation(summary = "Assign support ticket lead moderator")
     public ResponseEntity<TicketResponse> assignTicket(@PathVariable Long ticketId,
                                                         @Valid @RequestBody AssignTicketRequest request) {
+        return ResponseEntity.ok(ticketService.assignTicket(ticketId, request));
+    }
+
+    @PostMapping("/{ticketId}/claim")
+    @Operation(summary = "Take ownership of ticket as lead moderator")
+    public ResponseEntity<TicketResponse> claimOwnership(@PathVariable Long ticketId) {
+        CustomUserDetails details = authenticationFacade.getCurrentUserDetails();
+        AssignTicketRequest request = new AssignTicketRequest();
+        request.setAssignedToUserId(details.getUserId());
         return ResponseEntity.ok(ticketService.assignTicket(ticketId, request));
     }
 }

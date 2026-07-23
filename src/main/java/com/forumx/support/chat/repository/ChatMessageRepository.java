@@ -5,6 +5,7 @@ import com.forumx.support.chat.entity.MessageDeliveryStatus;
 import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -13,16 +14,54 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> {
 
-    @Query("SELECT m FROM ChatMessage m WHERE m.session.id = :sessionId AND m.deleted = false AND m.id < :beforeMessageId ORDER BY m.createdAt ASC, m.id ASC")
+    @EntityGraph(attributePaths = {"sender", "session"})
+    @Query("SELECT m FROM ChatMessage m WHERE m.session.id = :sessionId AND m.deleted = false AND m.id < :beforeMessageId")
     Page<ChatMessage> findMessagesBefore(
             @Param("sessionId") Long sessionId,
             @Param("beforeMessageId") Long beforeMessageId,
             Pageable pageable
     );
 
-    @Query("SELECT m FROM ChatMessage m WHERE m.session.id = :sessionId AND m.deleted = false ORDER BY m.createdAt ASC, m.id ASC")
+    @EntityGraph(attributePaths = {"sender", "session"})
+    @Query("SELECT m FROM ChatMessage m WHERE m.session.id = :sessionId AND m.deleted = false")
     Page<ChatMessage> findMessagesFirstPage(
             @Param("sessionId") Long sessionId,
+            Pageable pageable
+    );
+
+    @EntityGraph(attributePaths = {"sender", "session"})
+    @Query("SELECT m FROM ChatMessage m WHERE m.session.id = :sessionId AND m.deleted = false AND m.createdAt >= :joinedAt")
+    Page<ChatMessage> findMessagesForParticipantFirstPage(
+            @Param("sessionId") Long sessionId,
+            @Param("joinedAt") java.time.Instant joinedAt,
+            Pageable pageable
+    );
+
+    @EntityGraph(attributePaths = {"sender", "session"})
+    @Query("SELECT m FROM ChatMessage m WHERE m.session.id = :sessionId AND m.deleted = false AND m.createdAt >= :joinedAt AND m.id < :beforeMessageId")
+    Page<ChatMessage> findMessagesForParticipantBefore(
+            @Param("sessionId") Long sessionId,
+            @Param("joinedAt") java.time.Instant joinedAt,
+            @Param("beforeMessageId") Long beforeMessageId,
+            Pageable pageable
+    );
+
+    @EntityGraph(attributePaths = {"sender", "session"})
+    @Query("SELECT m FROM ChatMessage m WHERE m.session.id = :sessionId AND m.deleted = false AND m.createdAt >= :joinedAt AND m.createdAt <= :leftAt")
+    Page<ChatMessage> findMessagesForParticipantBetweenFirstPage(
+            @Param("sessionId") Long sessionId,
+            @Param("joinedAt") java.time.Instant joinedAt,
+            @Param("leftAt") java.time.Instant leftAt,
+            Pageable pageable
+    );
+
+    @EntityGraph(attributePaths = {"sender", "session"})
+    @Query("SELECT m FROM ChatMessage m WHERE m.session.id = :sessionId AND m.deleted = false AND m.createdAt >= :joinedAt AND m.createdAt <= :leftAt AND m.id < :beforeMessageId")
+    Page<ChatMessage> findMessagesForParticipantBetween(
+            @Param("sessionId") Long sessionId,
+            @Param("joinedAt") java.time.Instant joinedAt,
+            @Param("leftAt") java.time.Instant leftAt,
+            @Param("beforeMessageId") Long beforeMessageId,
             Pageable pageable
     );
 

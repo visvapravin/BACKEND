@@ -29,6 +29,11 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.forumx.notification.service.NotificationPersistenceService;
+import com.forumx.notification.dispatcher.NotificationDispatcher;
+import com.forumx.notification.dispatcher.NotificationDeliveryRequest;
+import com.forumx.notification.mapper.NotificationRealtimeMapper;
+import com.forumx.websocket.gateway.RealtimeGateway;
 
 /** Internal implementation of the Notification application boundary. */
 @Slf4j
@@ -43,6 +48,10 @@ public class NotificationService implements NotificationApplicationService {
     private final AuthenticationFacade authenticationFacade;
     private final TenantResolver tenantResolver;
     private final ApplicationEventPublisher applicationEventPublisher;
+    private final NotificationPersistenceService notificationPersistenceService;
+    private final NotificationDispatcher notificationDispatcher;
+    private final RealtimeGateway realtimeGateway;
+    private final NotificationRealtimeMapper realtimeMapper;
 
     @Override
     @Transactional
@@ -398,5 +407,63 @@ public class NotificationService implements NotificationApplicationService {
     }
 
     private record CurrentRecipient(Long userId, Long tenantId) {
+    }
+
+    @Override
+    @org.springframework.transaction.annotation.Transactional
+    public void processNotificationCreated(NotificationCreatedEvent event) {
+        if (event == null) {
+            log.warn("Cannot process null NotificationCreatedEvent");
+            return;
+        }
+
+        log.info("Orchestrating NotificationCreatedEvent in NotificationApplicationService. notificationId={}, recipientUsername={}",
+                event.notificationId(), event.recipientUsername());
+
+        // 1. Retrieve or verify persisted entity via NotificationPersistenceService
+        Notification notification = null;
+        if (event.notificationId() != null) {
+            notification = notificationPersistenceService.findById(event.notificationId()).orElse(null);
+        }
+
+        // 2. Multi-channel delivery dispatching
+        if (notification != null && notificationDispatcher != null) {
+            try {
+                notificationDispatcher.dispatch(new NotificationDeliveryRequest(notification, null));
+            } catch (Exception e) {
+                log.error("Failed dispatching notification delivery for notificationId={}: {}", event.notificationId(), e.getMessage(), e);
+            }
+        }
+
+        // 3. Realtime WebSocket Push via RealtimeGateway
+        if (event.recipientUsername() != null && realtimeGateway != null && realtimeMapper != null) {
+            try {
+                var realtimeEvent = realtimeMapper.toRealtimeEvent(event);
+                realtimeGateway.sendToUser(event.recipientUsername(), "/queue/notifications", realtimeEvent);
+                log.info("Pushed real-time WebSocket notification to recipientUsername={}", event.recipientUsername());
+            } catch (Exception e) {
+                log.error("Failed executing WebSocket push for recipientUsername={}: {}", event.recipientUsername(), e.getMessage(), e);
+            }
+        }
+    }
+
+    @Override
+    @org.springframework.transaction.annotation.Transactional
+    public void processNotificationEvent(com.forumx.notification.dto.NotificationEvent event) {
+        if (event == null) {
+            log.warn("Cannot process null NotificationEvent");
+            return;
+        }
+
+        log.info("Orchestrating NotificationEvent in NotificationApplicationService for email={}, type={}", event.email(), event.type());
+        Notification notification = saveFromEvent(event);
+
+        if (notification != null && notificationDispatcher != null) {
+            try {
+                notificationDispatcher.dispatch(new NotificationDeliveryRequest(notification, event));
+            } catch (Exception e) {
+                log.error("Failed dispatching delivery for event {}: {}", event.notificationId(), e.getMessage(), e);
+            }
+        }
     }
 }

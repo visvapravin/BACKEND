@@ -17,7 +17,7 @@ public class NotificationDeadLetterConsumer {
 
     private final ObjectMapper objectMapper;
 
-    @RabbitListener(queues = MessagingQueues.DELIVERY_DEAD_QUEUE)
+    @RabbitListener(queues = "${forumx.rabbitmq.queues.dead-letter:forumx.notification.dead.queue}")
     public void onDeadLetterEvent(EventEnvelope<?> envelope) {
         log.warn("Received dead letter delivery event: eventId={} type={}", envelope.eventId(), envelope.eventType());
         try {

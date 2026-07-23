@@ -51,6 +51,8 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
+    out-of-order: true
+    baseline-on-migrate: true
 
   # ---------------------------------------------------------------
   # Message Broker – CloudAMQP (RabbitMQ with TLS)
@@ -201,22 +203,25 @@ forumx:
     publisher-returns: true
 
   rabbitmq:
-    exchange:
-      name: forumx.events.exchange
-    retry-exchange:
-      name: forumx.retry.exchange
-    dead-letter-exchange:
-      name: forumx.dlx.exchange
+    exchanges:
+      system: forumx.events.system
+      user: forumx.events.user
+      notification: forumx.events.notification
+      support: forumx.events.support
+      retry: forumx.retry.exchange
+      dlx: forumx.dlx.exchange
     queues:
-      notification: forumx.notification.queue
-      email: forumx.email.queue
-      retry: forumx.retry.queue
-      dead-letter: forumx.dead-letter.queue
+      user-notification: forumx.user.notification.queue
+      email: forumx.notification.email.queue
+      retry: forumx.notification.retry.queue
+      dead-letter: forumx.notification.dead.queue
+      support: forumx.support.queue
+      chat: forumx.chat.queue
     routing-keys:
-      notification: forumx.notification
-      email: forumx.email
-      retry: forumx.retry
-      dead-letter: forumx.dead-letter
+      notification-created: notification.created
+      email-send: notification.email.send
+      delivery-retry: forumx.retry
+      delivery-dead: forumx.dead-letter
     retry-ttl: 5m
 
   kafka:

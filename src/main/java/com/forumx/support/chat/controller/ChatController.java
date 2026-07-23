@@ -1,15 +1,26 @@
 package com.forumx.support.chat.controller;
 
+import com.forumx.auth.entity.User;
+import com.forumx.auth.repository.UserRepository;
+import com.forumx.security.facade.AuthenticationFacade;
+import com.forumx.security.model.CustomUserDetails;
 import com.forumx.support.chat.dto.request.SendMessageRequest;
 import com.forumx.support.chat.dto.response.ChatMessageResponse;
 import com.forumx.support.chat.dto.response.ChatSessionResponse;
+import com.forumx.support.chat.dto.response.ParticipantResponse;
 import com.forumx.support.chat.entity.ChatMessage;
 import com.forumx.support.chat.entity.ChatSession;
+import com.forumx.support.chat.entity.ParticipantRole;
+import com.forumx.support.chat.entity.SupportSessionParticipant;
 import com.forumx.support.chat.mapper.ChatMessageMapper;
 import com.forumx.support.chat.service.ChatService;
+import com.forumx.support.chat.service.ChatSessionService;
+import com.forumx.tenant.resolver.TenantResolver;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.persistence.EntityNotFoundException;
 import jakarta.validation.Valid;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -17,17 +28,22 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/chat")
-@Tag(name = "Support Chat", description = "Live support chat session and messaging operations.")
+@Tag(name = "Support Chat", description = "Live support chat session and room operations.")
 public class ChatController {
 
     private final ChatService chatService;
+    private final ChatSessionService chatSessionService;
     private final ChatMessageMapper chatMessageMapper;
+    private final AuthenticationFacade authenticationFacade;
+    private final UserRepository userRepository;
+    private final TenantResolver tenantResolver;
 
     @PostMapping("/{ticketId}/messages")
     @Operation(summary = "Send support chat message")
@@ -39,9 +55,7 @@ public class ChatController {
             ChatMessage msg = chatService.sendMessage(ticketId, request);
             return ResponseEntity.status(HttpStatus.CREATED).body(chatMessageMapper.toResponse(msg));
         } catch (IllegalStateException e) {
-            if (e.getMessage().contains("not assigned")) {
-                throw new ResponseStatusException(HttpStatus.CONFLICT, e.getMessage(), e);
-            } else if (e.getMessage().contains("closed")) {
+            if (e.getMessage().contains("closed")) {
                 throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, e.getMessage(), e);
             }
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
@@ -82,5 +96,64 @@ public class ChatController {
     public ResponseEntity<ChatSessionResponse> getSession(@PathVariable Long ticketId) {
         ChatSession session = chatService.getSession(ticketId);
         return ResponseEntity.ok(chatMessageMapper.toResponse(session));
+    }
+
+    @PostMapping("/{ticketId}/join")
+    @Operation(summary = "Join support room as moderator")
+    public ResponseEntity<ParticipantResponse> joinRoom(@PathVariable Long ticketId) {
+        User user = resolveCurrentUser();
+        try {
+            SupportSessionParticipant participant = chatSessionService.joinRoom(ticketId, user, ParticipantRole.MODERATOR);
+            return ResponseEntity.ok(ParticipantResponse.builder()
+                    .id(participant.getId())
+                    .ticketId(ticketId)
+                    .sessionId(participant.getSession().getId())
+                    .userId(user.getId())
+                    .username(user.getUsername())
+                    .role(participant.getRole().name())
+                    .joinedAt(participant.getJoinedAt())
+                    .leftAt(participant.getLeftAt())
+                    .isActive(participant.isActive())
+                    .isOnline(true)
+                    .build());
+        } catch (IllegalStateException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+        }
+    }
+
+    @PostMapping("/{ticketId}/leave")
+    @Operation(summary = "Leave support room")
+    public ResponseEntity<ParticipantResponse> leaveRoom(@PathVariable Long ticketId) {
+        User user = resolveCurrentUser();
+        SupportSessionParticipant participant = chatSessionService.leaveRoom(ticketId, user);
+        return ResponseEntity.ok(ParticipantResponse.builder()
+                .id(participant.getId())
+                .ticketId(ticketId)
+                .sessionId(participant.getSession().getId())
+                .userId(user.getId())
+                .username(user.getUsername())
+                .role(participant.getRole().name())
+                .joinedAt(participant.getJoinedAt())
+                .leftAt(participant.getLeftAt())
+                .isActive(participant.isActive())
+                .isOnline(false)
+                .build());
+    }
+
+    @GetMapping("/{ticketId}/participants")
+    @Operation(summary = "Get active support room participants")
+    public ResponseEntity<List<ParticipantResponse>> getParticipants(@PathVariable Long ticketId) {
+        Long tenantId = tenantResolver.resolveTenantId();
+        return ResponseEntity.ok(chatSessionService.getParticipants(ticketId, tenantId));
+    }
+
+    private User resolveCurrentUser() {
+        Long tenantId = tenantResolver.resolveTenantId();
+        CustomUserDetails details = authenticationFacade.getCurrentUserDetails();
+        if (tenantId == null || details == null) {
+            throw new AccessDeniedException("Authenticated tenant context is required");
+        }
+        return userRepository.findByIdAndDeletedFalse(details.getUserId())
+                .orElseThrow(() -> new EntityNotFoundException("User not found with ID: " + details.getUserId()));
     }
 }

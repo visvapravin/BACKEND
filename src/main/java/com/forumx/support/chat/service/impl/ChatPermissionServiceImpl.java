@@ -1,35 +1,47 @@
 package com.forumx.support.chat.service.impl;
 
+import com.forumx.security.facade.AuthenticationFacade;
+import com.forumx.security.model.CustomUserDetails;
 import com.forumx.support.chat.entity.ChatMessage;
 import com.forumx.support.chat.entity.ChatSession;
 import com.forumx.support.chat.entity.ChatSessionStatus;
+import com.forumx.support.chat.repository.SupportSessionParticipantRepository;
 import com.forumx.support.chat.service.ChatPermissionService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.stereotype.Service;
 
 @Service
+@RequiredArgsConstructor
 public class ChatPermissionServiceImpl implements ChatPermissionService {
+
+    private final AuthenticationFacade authenticationFacade;
+    private final SupportSessionParticipantRepository participantRepository;
 
     @Override
     public void assertCanJoin(ChatSession session, Long userId) {
-        if (!isParticipant(session, userId)) {
-            throw new AccessDeniedException("User is not a participant in this chat session");
+        if (!canAccessSession(session, userId)) {
+            throw new AccessDeniedException("User is not authorized to join this chat session");
         }
     }
 
     @Override
     public void assertCanSend(ChatSession session, Long userId) {
-        if (!isParticipant(session, userId)) {
-            throw new AccessDeniedException("User is not a participant in this chat session");
-        }
         if (session.getStatus() == ChatSessionStatus.CLOSED) {
             throw new IllegalStateException("Cannot send message. Chat session is closed.");
+        }
+        boolean isCustomer = session.getCustomer() != null && session.getCustomer().getId().equals(userId);
+        boolean isActiveParticipant = participantRepository.existsBySession_Ticket_IdAndUser_IdAndIsActiveTrue(session.getTicket().getId(), userId);
+
+        if (!isCustomer && !isActiveParticipant) {
+            throw new AccessDeniedException("User is not an active participant in this chat session. Please join the room first.");
         }
     }
 
     @Override
     public void assertCanRead(ChatSession session, Long userId) {
-        if (!isParticipant(session, userId)) {
+        if (!canAccessSession(session, userId)) {
             throw new AccessDeniedException("User is not a participant in this chat session");
         }
     }
@@ -47,8 +59,22 @@ public class ChatPermissionServiceImpl implements ChatPermissionService {
         }
     }
 
-    private boolean isParticipant(ChatSession session, Long userId) {
-        return session.getCustomer().getId().equals(userId) ||
-               session.getModerator().getId().equals(userId);
+    private boolean canAccessSession(ChatSession session, Long userId) {
+        if (session.getCustomer() != null && session.getCustomer().getId().equals(userId)) {
+            return true;
+        }
+        if (session.getModerator() != null && session.getModerator().getId().equals(userId)) {
+            return true;
+        }
+        if (participantRepository.existsBySession_Ticket_IdAndUser_IdAndIsActiveTrue(session.getTicket().getId(), userId)) {
+            return true;
+        }
+        CustomUserDetails details = authenticationFacade.getCurrentUserDetails();
+        if (details != null && details.getUserId().equals(userId)) {
+            return details.getAuthorities().stream()
+                    .map(GrantedAuthority::getAuthority)
+                    .anyMatch(auth -> auth.equals("ROLE_MODERATOR") || auth.equals("ROLE_ADMIN") || auth.equals("ROLE_SUPER_ADMIN"));
+        }
+        return false;
     }
 }

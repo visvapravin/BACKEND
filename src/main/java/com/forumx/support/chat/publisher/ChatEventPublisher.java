@@ -32,6 +32,16 @@ public class ChatEventPublisher {
     public void onMessageSent(ChatMessageSentEvent event) {
         log.info("Handling transactional event for chat message sent. messageId={}, tenantId={}", 
                 event.messageId(), event.tenantId());
+
+        // Broadcast directly to WebSocket subscribers for instant delivery
+        try {
+            String destination = "/topic/tenants/" + event.tenantId() + "/chat/" + event.sessionId();
+            realtimeGateway.sendToTopic(destination, new RealtimeEvent("CHAT_MESSAGE_SENT", event));
+            log.info("Broadcasted ChatMessageSentEvent to WebSocket destination={}", destination);
+        } catch (Exception e) {
+            log.error("Failed to broadcast chat event to WebSocket. destination error={}", e.getMessage(), e);
+        }
+
         try {
             EventEnvelope<ChatMessageSentEvent> envelope = EventEnvelope.of(
                     "CHAT_MESSAGE_SENT",
@@ -126,5 +136,25 @@ public class ChatEventPublisher {
         String destination = "/topic/tenants/" + event.tenantId() + "/chat/" + event.sessionId() + "/typing";
         realtimeGateway.sendToTopic(destination, realtimeEvent);
         log.debug("Successfully broadcast transient TYPING_STOPPED to topic={}", destination);
+    }
+
+    @EventListener
+    public void onParticipantJoined(com.forumx.support.chat.event.ephemeral.ChatParticipantJoinedEvent event) {
+        log.info("Handling participant joined event. sessionId={}, userId={}", event.sessionId(), event.userId());
+        RealtimeEvent<com.forumx.support.chat.event.ephemeral.ChatParticipantJoinedEvent> realtimeEvent =
+                new RealtimeEvent<>("PARTICIPANT_JOINED", event);
+        String destination = "/topic/tenants/" + event.tenantId() + "/chat/" + event.sessionId();
+        realtimeGateway.sendToTopic(destination, realtimeEvent);
+        log.info("Successfully broadcast PARTICIPANT_JOINED to topic={}", destination);
+    }
+
+    @EventListener
+    public void onParticipantLeft(com.forumx.support.chat.event.ephemeral.ChatParticipantLeftEvent event) {
+        log.info("Handling participant left event. sessionId={}, userId={}", event.sessionId(), event.userId());
+        RealtimeEvent<com.forumx.support.chat.event.ephemeral.ChatParticipantLeftEvent> realtimeEvent =
+                new RealtimeEvent<>("PARTICIPANT_LEFT", event);
+        String destination = "/topic/tenants/" + event.tenantId() + "/chat/" + event.sessionId();
+        realtimeGateway.sendToTopic(destination, realtimeEvent);
+        log.info("Successfully broadcast PARTICIPANT_LEFT to topic={}", destination);
     }
 }

@@ -57,7 +57,7 @@ public class ChatSecurityIntegrationTest {
     @Autowired private com.forumx.auth.passwordreset.repository.PasswordResetTokenRepository passwordResetTokenRepository;
     @Autowired private com.forumx.auth.repository.RefreshTokenRepository refreshTokenRepository;
     @Autowired private com.forumx.bookmark.repository.BookmarkRepository bookmarkRepository;
-    private com.forumx.question.repository.QuestionRepository questionRepository;
+    @Autowired private com.forumx.question.repository.QuestionRepository questionRepository;
     @Autowired private com.forumx.answer.repository.AnswerRepository answerRepository;
     @Autowired private com.forumx.comment.repository.CommentRepository commentRepository;
     @Autowired private com.forumx.moderation.repository.ModerationReportRepository reportRepository;
@@ -71,6 +71,8 @@ public class ChatSecurityIntegrationTest {
     private com.forumx.security.model.CustomUserDetails moderatorDetails;
     private com.forumx.security.model.CustomUserDetails outsiderDetails;
 
+    @Autowired private com.forumx.support.chat.repository.SupportSessionParticipantRepository participantRepository;
+
     @BeforeEach
     public void setUp() {
         transactionTemplate.execute(status -> {
@@ -79,6 +81,7 @@ public class ChatSecurityIntegrationTest {
             commentRepository.deleteAllInBatch();
             notificationRepository.deleteAllInBatch();
             chatMessageRepository.deleteAllInBatch();
+            participantRepository.deleteAllInBatch();
             chatSessionRepository.deleteAllInBatch();
             ticketRepository.deleteAllInBatch();
             answerRepository.deleteAllInBatch();

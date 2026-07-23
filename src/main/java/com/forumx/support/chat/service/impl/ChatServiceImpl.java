@@ -11,10 +11,12 @@ import com.forumx.support.chat.entity.ChatMessage;
 import com.forumx.support.chat.entity.ChatSession;
 import com.forumx.support.chat.entity.MessageDeliveryStatus;
 import com.forumx.support.chat.entity.MessageType;
+import com.forumx.support.chat.entity.SupportSessionParticipant;
 import com.forumx.support.chat.event.durable.ChatMessageDeletedEvent;
 import com.forumx.support.chat.event.durable.ChatMessageReadEvent;
 import com.forumx.support.chat.event.durable.ChatMessageSentEvent;
 import com.forumx.support.chat.repository.ChatMessageRepository;
+import com.forumx.support.chat.repository.SupportSessionParticipantRepository;
 import com.forumx.support.chat.service.ChatPermissionService;
 import com.forumx.support.chat.service.ChatService;
 import com.forumx.support.chat.service.ChatSessionService;
@@ -24,6 +26,7 @@ import com.forumx.tenant.resolver.TenantResolver;
 import jakarta.persistence.EntityNotFoundException;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -42,6 +45,8 @@ public class ChatServiceImpl implements ChatService {
     private final ChatSessionService chatSessionService;
     private final ChatPermissionService chatPermissionService;
     private final ChatMessageRepository chatMessageRepository;
+    private final SupportSessionParticipantRepository participantRepository;
+    private final com.forumx.support.chat.mapper.ChatMessageMapper chatMessageMapper;
     private final TicketRepository ticketRepository;
     private final UserRepository userRepository;
     private final TenantResolver tenantResolver;
@@ -86,13 +91,18 @@ public class ChatServiceImpl implements ChatService {
         eventPublisher.publishEvent(event);
 
         // Trigger notification if recipient is offline
-        Long recipientId = session.getCustomer().getId().equals(current.userId()) 
-                ? session.getModerator().getId() 
-                : session.getCustomer().getId();
+        Long recipientId = null;
+        if (session.getCustomer() != null && session.getCustomer().getId().equals(current.userId())) {
+            if (session.getModerator() != null) {
+                recipientId = session.getModerator().getId();
+            }
+        } else if (session.getCustomer() != null) {
+            recipientId = session.getCustomer().getId();
+        }
 
-        if (!presenceService.isOnline(recipientId)) {
+        if (recipientId != null && !presenceService.isOnline(recipientId)) {
             String preview = savedMessage.getContent();
-            if (preview.length() > 100) {
+            if (preview != null && preview.length() > 100) {
                 preview = preview.substring(0, 100) + "...";
             }
             com.forumx.notification.api.ChatNotificationCommand notifCmd = new com.forumx.notification.api.ChatNotificationCommand(
@@ -183,10 +193,42 @@ public class ChatServiceImpl implements ChatService {
         ChatSession session = chatSessionService.getSessionByTicketId(ticketId, current.tenantId());
         chatPermissionService.assertCanRead(session, current.userId());
 
+        // Customers always view the complete conversation history
+        boolean isCustomer = session.getCustomer() != null && session.getCustomer().getId().equals(current.userId());
+        if (isCustomer) {
+            if (beforeMessageId == null) {
+                return chatMessageRepository.findMessagesFirstPage(session.getId(), pageable);
+            } else {
+                return chatMessageRepository.findMessagesBefore(session.getId(), beforeMessageId, pageable);
+            }
+        }
+
+        // Moderators only see messages created AFTER they joined the support room (joinedAt)
+        Optional<SupportSessionParticipant> participant = participantRepository
+                .findTopBySession_Ticket_IdAndUser_IdOrderByJoinedAtDesc(ticketId, current.userId());
+
+        if (participant.isEmpty()) {
+            // Moderator has not joined this support room yet
+            return Page.empty(pageable);
+        }
+
+        SupportSessionParticipant p = participant.get();
+        Instant joinedAt = p.getJoinedAt();
+
+        if (!p.isActive() && p.getLeftAt() != null) {
+            // Moderator left the room. Only return messages sent while they were active (joinedAt <= createdAt <= leftAt)
+            Instant leftAt = p.getLeftAt();
+            if (beforeMessageId == null) {
+                return chatMessageRepository.findMessagesForParticipantBetweenFirstPage(session.getId(), joinedAt, leftAt, pageable);
+            } else {
+                return chatMessageRepository.findMessagesForParticipantBetween(session.getId(), joinedAt, leftAt, beforeMessageId, pageable);
+            }
+        }
+
         if (beforeMessageId == null) {
-            return chatMessageRepository.findMessagesFirstPage(session.getId(), pageable);
+            return chatMessageRepository.findMessagesForParticipantFirstPage(session.getId(), joinedAt, pageable);
         } else {
-            return chatMessageRepository.findMessagesBefore(session.getId(), beforeMessageId, pageable);
+            return chatMessageRepository.findMessagesForParticipantBefore(session.getId(), joinedAt, beforeMessageId, pageable);
         }
     }
 

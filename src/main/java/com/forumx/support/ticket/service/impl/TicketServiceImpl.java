@@ -46,6 +46,7 @@ public class TicketServiceImpl implements TicketService {
     private final NotificationApplicationService notificationApplicationService;
     private final org.springframework.context.ApplicationEventPublisher eventPublisher;
     private final com.forumx.support.chat.service.ChatSessionService chatSessionService;
+    private final com.forumx.support.chat.repository.ChatSessionRepository chatSessionRepository;
 
     @Override
     @Transactional
@@ -64,6 +65,9 @@ public class TicketServiceImpl implements TicketService {
         ticket.setCreatedBy(String.valueOf(current.userId()));
 
         Ticket savedTicket = ticketRepository.save(ticket);
+
+        // Initialize ChatSession and register creator as participant for live support room
+        chatSessionService.getOrCreateSession(savedTicket, current.tenantId());
 
         // Find moderators, admins, and super admins to notify (excluding creator self-notification)
         java.util.List<User> moderators = userRepository.findUsersByTenantIdAndRoles(
@@ -161,6 +165,14 @@ public class TicketServiceImpl implements TicketService {
         }
         ticket.setAssignedTo(assignee);
         Ticket saved = ticketRepository.save(ticket);
+
+        // Update ChatSession lead moderator for reference
+        chatSessionRepository.findByTicket_IdAndTenant_IdAndDeletedFalse(saved.getId(), current.tenantId())
+                .ifPresent(session -> {
+                    session.setModerator(assignee);
+                    session.setStatus(com.forumx.support.chat.entity.ChatSessionStatus.ACTIVE);
+                    chatSessionRepository.save(session);
+                });
 
         // Publish SupportTicketClaimedEvent for Live Support Queue
         eventPublisher.publishEvent(new com.forumx.support.queue.event.SupportTicketClaimedEvent(

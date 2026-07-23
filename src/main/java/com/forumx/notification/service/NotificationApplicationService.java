@@ -30,4 +30,7 @@ public interface NotificationApplicationService {
     void notifyCommentUpvoted(Long tenantId, Long recipientId, Long actorId, String actorUsername, Long commentId);
 
     void notifyContentReported(Long tenantId, Long reporterId, String reporterUsername, Long targetId, com.forumx.notification.entity.ReferenceType targetType, Long authorId);
+
+    void processNotificationCreated(com.forumx.notification.event.NotificationCreatedEvent event);
+    void processNotificationEvent(com.forumx.notification.dto.NotificationEvent event);
 }

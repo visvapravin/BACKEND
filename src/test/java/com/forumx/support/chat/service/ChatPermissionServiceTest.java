@@ -4,15 +4,28 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.forumx.auth.entity.User;
+import com.forumx.security.facade.AuthenticationFacade;
 import com.forumx.support.chat.entity.ChatMessage;
 import com.forumx.support.chat.entity.ChatSession;
 import com.forumx.support.chat.entity.ChatSessionStatus;
+import com.forumx.support.chat.repository.SupportSessionParticipantRepository;
 import com.forumx.support.chat.service.impl.ChatPermissionServiceImpl;
+import com.forumx.support.ticket.entity.Ticket;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.access.AccessDeniedException;
 
+@ExtendWith(MockitoExtension.class)
 public class ChatPermissionServiceTest {
+
+    @Mock
+    private AuthenticationFacade authenticationFacade;
+
+    @Mock
+    private SupportSessionParticipantRepository participantRepository;
 
     private ChatPermissionServiceImpl permissionService;
     private ChatSession session;
@@ -22,14 +35,16 @@ public class ChatPermissionServiceTest {
 
     @BeforeEach
     public void setUp() {
-        permissionService = new ChatPermissionServiceImpl();
+        permissionService = new ChatPermissionServiceImpl(authenticationFacade, participantRepository);
 
         customer = User.builder().id(1L).username("customer").build();
         moderator = User.builder().id(2L).username("moderator").build();
         outsider = User.builder().id(3L).username("outsider").build();
 
+        Ticket ticket = Ticket.builder().id(100L).build();
         session = ChatSession.builder()
                 .id(10L)
+                .ticket(ticket)
                 .customer(customer)
                 .moderator(moderator)
                 .status(ChatSessionStatus.ACTIVE)
@@ -51,7 +66,8 @@ public class ChatPermissionServiceTest {
         session.setStatus(ChatSessionStatus.CLOSED);
         assertThrows(IllegalStateException.class, () -> permissionService.assertCanSend(session, customer.getId()));
         
-        // Outsider should be denied
+        // Reset to ACTIVE and verify outsider is denied
+        session.setStatus(ChatSessionStatus.ACTIVE);
         assertThrows(AccessDeniedException.class, () -> permissionService.assertCanSend(session, outsider.getId()));
     }
 

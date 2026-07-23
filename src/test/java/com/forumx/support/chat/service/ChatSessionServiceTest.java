@@ -4,13 +4,21 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 import com.forumx.auth.entity.User;
+import com.forumx.presence.service.PresenceService;
+import com.forumx.support.chat.dto.response.ParticipantResponse;
 import com.forumx.support.chat.entity.ChatSession;
 import com.forumx.support.chat.entity.ChatSessionStatus;
+import com.forumx.support.chat.entity.ParticipantRole;
+import com.forumx.support.chat.entity.SupportSessionParticipant;
+import com.forumx.support.chat.event.ephemeral.ChatParticipantJoinedEvent;
+import com.forumx.support.chat.event.ephemeral.ChatParticipantLeftEvent;
 import com.forumx.support.chat.repository.ChatSessionRepository;
+import com.forumx.support.chat.repository.SupportSessionParticipantRepository;
 import com.forumx.support.chat.service.impl.ChatSessionServiceImpl;
 import com.forumx.support.ticket.entity.Ticket;
 import com.forumx.tenant.entity.Tenant;
 import jakarta.persistence.EntityNotFoundException;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -19,17 +27,23 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 @ExtendWith(MockitoExtension.class)
 public class ChatSessionServiceTest {
 
     @Mock private ChatSessionRepository chatSessionRepository;
+    @Mock private SupportSessionParticipantRepository participantRepository;
+    @Mock private PresenceService presenceService;
+    @Mock private ApplicationEventPublisher eventPublisher;
+
     @InjectMocks private ChatSessionServiceImpl chatSessionService;
 
     private Tenant tenant;
     private User customer;
     private User moderator;
     private Ticket ticket;
+    private ChatSession chatSession;
 
     @BeforeEach
     public void setUp() {
@@ -40,103 +54,116 @@ public class ChatSessionServiceTest {
                 .id(100L)
                 .tenant(tenant)
                 .creator(customer)
-                .assignedTo(moderator)
+                .build();
+        chatSession = ChatSession.builder()
+                .id(200L)
+                .ticket(ticket)
+                .tenant(tenant)
+                .customer(customer)
+                .status(ChatSessionStatus.ACTIVE)
                 .build();
     }
 
     @Test
     public void testGetOrCreateSessionRetrievesExisting() {
-        ChatSession existing = ChatSession.builder().id(200L).ticket(ticket).tenant(tenant).build();
         when(chatSessionRepository.findByTicket_IdAndTenant_IdAndDeletedFalse(100L, 1L))
-                .thenReturn(Optional.of(existing));
+                .thenReturn(Optional.of(chatSession));
 
         ChatSession result = chatSessionService.getOrCreateSession(ticket, 1L);
 
-        assertEquals(existing, result);
+        assertEquals(chatSession, result);
         verify(chatSessionRepository, never()).save(any());
     }
 
     @Test
-    public void testGetOrCreateSessionCreatesNewSuccessfully() {
+    public void testGetOrCreateSessionCreatesNewAndRegistersCustomerParticipant() {
         when(chatSessionRepository.findByTicket_IdAndTenant_IdAndDeletedFalse(100L, 1L))
                 .thenReturn(Optional.empty());
-
-        ChatSession expectedSaved = ChatSession.builder()
-                .id(200L)
-                .ticket(ticket)
-                .tenant(tenant)
-                .customer(customer)
-                .moderator(moderator)
-                .status(ChatSessionStatus.ACTIVE)
-                .build();
-
-        when(chatSessionRepository.save(any(ChatSession.class))).thenReturn(expectedSaved);
+        when(chatSessionRepository.save(any(ChatSession.class))).thenReturn(chatSession);
 
         ChatSession result = chatSessionService.getOrCreateSession(ticket, 1L);
 
         assertNotNull(result);
         assertEquals(200L, result.getId());
+        verify(participantRepository).save(any(SupportSessionParticipant.class));
+    }
+
+    @Test
+    public void testJoinRoomFailsIfModeratorOffline() {
+        when(presenceService.isOnline(20L)).thenReturn(false);
+
+        assertThrows(IllegalStateException.class, () -> 
+                chatSessionService.joinRoom(100L, moderator, ParticipantRole.MODERATOR));
+
+        verify(participantRepository, never()).save(any());
+    }
+
+    @Test
+    public void testJoinRoomSuccessWhenModeratorOnline() {
+        when(presenceService.isOnline(20L)).thenReturn(true);
+        when(chatSessionRepository.findByTicket_IdAndDeletedFalse(100L)).thenReturn(Optional.of(chatSession));
+        when(participantRepository.findBySession_Ticket_IdAndUser_IdAndIsActiveTrue(100L, 20L)).thenReturn(Optional.empty());
+        when(participantRepository.findTopBySession_Ticket_IdAndUser_IdOrderByJoinedAtDesc(100L, 20L)).thenReturn(Optional.empty());
         
-        ArgumentCaptor<ChatSession> sessionCaptor = ArgumentCaptor.forClass(ChatSession.class);
-        verify(chatSessionRepository).save(sessionCaptor.capture());
-        ChatSession captured = sessionCaptor.getValue();
-        assertEquals(ticket, captured.getTicket());
-        assertEquals(customer, captured.getCustomer());
-        assertEquals(moderator, captured.getModerator());
-        assertEquals(ChatSessionStatus.ACTIVE, captured.getStatus());
-    }
-
-    @Test
-    public void testGetOrCreateSessionThrowsIfUnassigned() {
-        ticket.setAssignedTo(null); // unassigned
-
-        when(chatSessionRepository.findByTicket_IdAndTenant_IdAndDeletedFalse(100L, 1L))
-                .thenReturn(Optional.empty());
-
-        assertThrows(IllegalStateException.class, () -> chatSessionService.getOrCreateSession(ticket, 1L));
-        verify(chatSessionRepository, never()).save(any());
-    }
-
-    @Test
-    public void testGetSessionByTicketIdFound() {
-        ChatSession session = ChatSession.builder().id(200L).build();
-        when(chatSessionRepository.findByTicket_IdAndTenant_IdAndDeletedFalse(100L, 1L))
-                .thenReturn(Optional.of(session));
-
-        ChatSession result = chatSessionService.getSessionByTicketId(100L, 1L);
-        assertEquals(session, result);
-    }
-
-    @Test
-    public void testGetSessionByTicketIdNotFoundThrows() {
-        when(chatSessionRepository.findByTicket_IdAndTenant_IdAndDeletedFalse(100L, 1L))
-                .thenReturn(Optional.empty());
-
-        assertThrows(EntityNotFoundException.class, () -> chatSessionService.getSessionByTicketId(100L, 1L));
-    }
-
-    @Test
-    public void testCloseSessionByTicketIdSuccessfully() {
-        ChatSession session = ChatSession.builder()
-                .id(200L)
-                .status(ChatSessionStatus.ACTIVE)
+        SupportSessionParticipant savedParticipant = SupportSessionParticipant.builder()
+                .id(1L)
+                .session(chatSession)
+                .tenant(tenant)
+                .user(moderator)
+                .role(ParticipantRole.MODERATOR)
+                .isActive(true)
                 .build();
-        when(chatSessionRepository.findByTicket_IdAndTenant_IdAndDeletedFalse(100L, 1L))
-                .thenReturn(Optional.of(session));
 
-        chatSessionService.closeSessionByTicketId(100L, 1L);
+        when(participantRepository.save(any())).thenReturn(savedParticipant);
 
-        assertEquals(ChatSessionStatus.CLOSED, session.getStatus());
-        verify(chatSessionRepository).save(session);
+        SupportSessionParticipant result = chatSessionService.joinRoom(100L, moderator, ParticipantRole.MODERATOR);
+
+        assertNotNull(result);
+        assertEquals(ParticipantRole.MODERATOR, result.getRole());
+        verify(eventPublisher).publishEvent(any(ChatParticipantJoinedEvent.class));
     }
 
     @Test
-    public void testCloseSessionByTicketIdNotFoundNoOp() {
-        when(chatSessionRepository.findByTicket_IdAndTenant_IdAndDeletedFalse(100L, 1L))
-                .thenReturn(Optional.empty());
+    public void testLeaveRoomSuccess() {
+        SupportSessionParticipant activeParticipant = SupportSessionParticipant.builder()
+                .id(1L)
+                .session(chatSession)
+                .tenant(tenant)
+                .user(moderator)
+                .role(ParticipantRole.MODERATOR)
+                .isActive(true)
+                .build();
 
-        chatSessionService.closeSessionByTicketId(100L, 1L);
+        when(participantRepository.findBySession_Ticket_IdAndUser_IdAndIsActiveTrue(100L, 20L))
+                .thenReturn(Optional.of(activeParticipant));
+        when(participantRepository.save(any())).thenReturn(activeParticipant);
 
-        verify(chatSessionRepository, never()).save(any());
+        SupportSessionParticipant result = chatSessionService.leaveRoom(100L, moderator);
+
+        assertFalse(result.isActive());
+        assertNotNull(result.getLeftAt());
+        verify(eventPublisher).publishEvent(any(ChatParticipantLeftEvent.class));
+    }
+
+    @Test
+    public void testGetParticipantsReturnsList() {
+        SupportSessionParticipant p = SupportSessionParticipant.builder()
+                .id(1L)
+                .session(chatSession)
+                .tenant(tenant)
+                .user(moderator)
+                .role(ParticipantRole.MODERATOR)
+                .isActive(true)
+                .build();
+
+        when(participantRepository.findBySession_Ticket_IdAndTenant_IdAndIsActiveTrue(100L, 1L))
+                .thenReturn(List.of(p));
+        when(presenceService.isOnline(20L)).thenReturn(true);
+
+        List<ParticipantResponse> result = chatSessionService.getParticipants(100L, 1L);
+
+        assertEquals(1, result.size());
+        assertEquals(20L, result.get(0).getUserId());
+        assertTrue(result.get(0).isOnline());
     }
 }

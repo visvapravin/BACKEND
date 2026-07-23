@@ -20,4 +20,11 @@ public class RealtimeEvent<T> {
     
     private String type;
     private T payload;
+
+    public RealtimeEvent(String type, T payload) {
+        this.eventId = UUID.randomUUID();
+        this.timestamp = Instant.now();
+        this.type = type;
+        this.payload = payload;
+    }
 }

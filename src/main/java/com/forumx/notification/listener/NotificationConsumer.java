@@ -11,10 +11,11 @@ import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
+@Deprecated(forRemoval = true)
 @Slf4j
 @Component
 @RequiredArgsConstructor
-@ConditionalOnProperty(name = "forumx.messaging.enabled", havingValue = "true")
+@ConditionalOnProperty(name = "forumx.messaging.enabled", havingValue = "false")
 public class NotificationConsumer {
 
     private final NotificationApplicationService notificationApplicationService;

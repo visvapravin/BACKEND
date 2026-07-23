@@ -62,7 +62,7 @@ public class SupportQueueNotificationIntegrationTest {
     private com.forumx.auth.repository.UserProfileRepository userProfileRepository;
 
     @Autowired private com.forumx.bookmark.repository.BookmarkRepository bookmarkRepository;
-    private com.forumx.question.repository.QuestionRepository questionRepository;
+    @Autowired private com.forumx.question.repository.QuestionRepository questionRepository;
 
     @Autowired
     private com.forumx.answer.repository.AnswerRepository answerRepository;

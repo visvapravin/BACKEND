@@ -53,7 +53,7 @@ public class ChatNotificationIntegrationTest {
     @Autowired private com.forumx.auth.passwordreset.repository.PasswordResetTokenRepository passwordResetTokenRepository;
     @Autowired private com.forumx.auth.repository.RefreshTokenRepository refreshTokenRepository;
     @Autowired private com.forumx.bookmark.repository.BookmarkRepository bookmarkRepository;
-    private com.forumx.question.repository.QuestionRepository questionRepository;
+    @Autowired private com.forumx.question.repository.QuestionRepository questionRepository;
     @Autowired private com.forumx.answer.repository.AnswerRepository answerRepository;
     @Autowired private com.forumx.comment.repository.CommentRepository commentRepository;
     @Autowired private com.forumx.moderation.repository.ModerationReportRepository reportRepository;

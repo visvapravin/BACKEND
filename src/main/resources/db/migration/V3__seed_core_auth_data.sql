@@ -120,3 +120,51 @@ INSERT INTO roles (
     'Default Administrator Role',
     true
 ) ON CONFLICT (role_name) DO NOTHING;
+
+INSERT INTO roles (
+    created_at,
+    updated_at,
+    created_by,
+    updated_by,
+    version,
+    deleted,
+    deleted_at,
+    role_name,
+    description,
+    active
+) VALUES (
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP,
+    'SYSTEM',
+    'SYSTEM',
+    0,
+    false,
+    NULL,
+    'MODERATOR',
+    'Default Moderator Role',
+    true
+) ON CONFLICT (role_name) DO NOTHING;
+
+INSERT INTO roles (
+    created_at,
+    updated_at,
+    created_by,
+    updated_by,
+    version,
+    deleted,
+    deleted_at,
+    role_name,
+    description,
+    active
+) VALUES (
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP,
+    'SYSTEM',
+    'SYSTEM',
+    0,
+    false,
+    NULL,
+    'SUPER_ADMIN',
+    'Default Super Admin Role',
+    true
+) ON CONFLICT (role_name) DO NOTHING;

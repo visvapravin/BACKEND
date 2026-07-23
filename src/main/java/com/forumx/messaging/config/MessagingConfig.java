@@ -1,8 +1,5 @@
 package com.forumx.messaging.config;
 
-import com.forumx.messaging.constant.MessagingExchanges;
-import com.forumx.messaging.constant.MessagingQueues;
-import com.forumx.messaging.constant.MessagingRoutingKeys;
 import com.forumx.messaging.properties.MessagingProperties;
 import com.forumx.messaging.serializer.MessageSerializer;
 import lombok.RequiredArgsConstructor;
@@ -13,6 +10,7 @@ import org.springframework.amqp.core.DirectExchange;
 import org.springframework.amqp.core.Queue;
 import org.springframework.amqp.core.QueueBuilder;
 import org.springframework.amqp.core.TopicExchange;
+import org.springframework.amqp.rabbit.annotation.EnableRabbit;
 import org.springframework.amqp.rabbit.connection.CachingConnectionFactory;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.rabbit.core.RabbitAdmin;
@@ -24,6 +22,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
+@EnableRabbit
 @RequiredArgsConstructor
 @EnableConfigurationProperties(MessagingProperties.class)
 @ConditionalOnProperty(name = "forumx.messaging.enabled", havingValue = "true")
@@ -32,11 +31,11 @@ public class MessagingConfig {
     private final MessagingProperties properties;
 
     public static final String RETRY_EXCHANGE = "forumx.retry.exchange";
-    public static final String RETRY_QUEUE = "forumx.retry.queue";
+    public static final String RETRY_QUEUE = "forumx.notification.retry.queue";
     public static final String RETRY_ROUTING_KEY = "forumx.retry";
 
     public static final String DLX_EXCHANGE = "forumx.dlx.exchange";
-    public static final String DEAD_LETTER_QUEUE = "forumx.dead-letter.queue";
+    public static final String DEAD_LETTER_QUEUE = "forumx.notification.dead.queue";
     public static final String DEAD_LETTER_ROUTING_KEY = "forumx.dead-letter";
 
     @Bean
@@ -77,88 +76,77 @@ public class MessagingConfig {
 
     @Bean
     public Declarables messagingDeclarables() {
-        TopicExchange systemExchange = new TopicExchange(MessagingExchanges.SYSTEM_EXCHANGE, true, false);
-        TopicExchange userExchange = new TopicExchange(MessagingExchanges.USER_EXCHANGE, true, false);
-        TopicExchange notificationExchange = new TopicExchange(MessagingExchanges.NOTIFICATION_EXCHANGE, true, false);
-        TopicExchange supportExchange = new TopicExchange(MessagingExchanges.SUPPORT_EVENTS_EXCHANGE, true, false);
+        MessagingProperties.RabbitMq.Exchanges exchanges = properties.getRabbitmq().getExchanges();
+        MessagingProperties.RabbitMq.Queues queues = properties.getRabbitmq().getQueues();
+        MessagingProperties.RabbitMq.RoutingKeys routingKeys = properties.getRabbitmq().getRoutingKeys();
 
-        TopicExchange forumxNotificationExchange = new TopicExchange("forumx.notification.exchange", true, false);
-        Queue forumxNotificationQueue = QueueBuilder.durable("forumx.notification.queue").build();
-        Binding forumxNotificationBinding = BindingBuilder.bind(forumxNotificationQueue)
-                .to(forumxNotificationExchange)
-                .with("notification.email.send");
+        // Topic Exchanges
+        TopicExchange systemExchange = new TopicExchange(exchanges.getSystem(), true, false);
+        TopicExchange userExchange = new TopicExchange(exchanges.getUser(), true, false);
+        TopicExchange notificationExchange = new TopicExchange(exchanges.getNotification(), true, false);
+        TopicExchange supportExchange = new TopicExchange(exchanges.getSupport(), true, false);
 
-        // Retry & Dead Letter Topology
-        DirectExchange retryExchange = new DirectExchange(RETRY_EXCHANGE, true, false);
-        Queue retryQueue = QueueBuilder.durable(RETRY_QUEUE)
-                .withArgument("x-dead-letter-exchange", "forumx.notification.exchange")
-                .withArgument("x-dead-letter-routing-key", "notification.email.send")
+        // Direct Exchanges for Retry and DLX
+        DirectExchange retryExchange = new DirectExchange(exchanges.getRetry(), true, false);
+        DirectExchange dlxExchange = new DirectExchange(exchanges.getDlx(), true, false);
+
+        // User Notification Queue & Binding
+        Queue userNotificationQueue = QueueBuilder.durable(queues.getUserNotification()).build();
+        Binding userNotificationBinding = BindingBuilder.bind(userNotificationQueue)
+                .to(userExchange)
+                .with(routingKeys.getNotificationCreated());
+
+        // Email Queue & Binding
+        Queue emailQueue = QueueBuilder.durable(queues.getEmail()).build();
+        Binding emailBinding = BindingBuilder.bind(emailQueue)
+                .to(notificationExchange)
+                .with(routingKeys.getEmailSend());
+
+        // Support & Chat Queues & Bindings
+        Queue supportQueue = QueueBuilder.durable(queues.getSupport()).build();
+        Binding supportBinding = BindingBuilder.bind(supportQueue)
+                .to(supportExchange)
+                .with("support.ticket.#");
+
+        Queue chatQueue = QueueBuilder.durable(queues.getChat()).build();
+        Binding chatBinding = BindingBuilder.bind(chatQueue)
+                .to(supportExchange)
+                .with("chat.#");
+
+        // Retry Queue (Dead letters to notification exchange) & Binding
+        Queue retryQueue = QueueBuilder.durable(queues.getRetry())
+                .withArgument("x-dead-letter-exchange", exchanges.getNotification())
+                .withArgument("x-dead-letter-routing-key", routingKeys.getEmailSend())
                 .build();
-        Binding retryBinding = BindingBuilder.bind(retryQueue).to(retryExchange).with(RETRY_ROUTING_KEY);
+        Binding retryBinding = BindingBuilder.bind(retryQueue)
+                .to(retryExchange)
+                .with(routingKeys.getDeliveryRetry());
 
-        DirectExchange dlxExchange = new DirectExchange(DLX_EXCHANGE, true, false);
-        Queue deadLetterQueue = QueueBuilder.durable(DEAD_LETTER_QUEUE).build();
-        Binding deadLetterBinding = BindingBuilder.bind(deadLetterQueue).to(dlxExchange).with(DEAD_LETTER_ROUTING_KEY);
-
-        Queue supportQueue = QueueBuilder.durable(MessagingQueues.SUPPORT_QUEUE)
-                .withArgument("x-dead-letter-exchange", MessagingExchanges.SUPPORT_EVENTS_EXCHANGE)
-                .withArgument("x-dead-letter-routing-key", MessagingQueues.SUPPORT_DLQ)
-                .build();
-        Queue supportDlq = QueueBuilder.durable(MessagingQueues.SUPPORT_DLQ).build();
-        Binding supportBinding = BindingBuilder.bind(supportQueue).to(supportExchange).with("support.ticket.#");
-
-        Queue chatQueue = QueueBuilder.durable(MessagingQueues.CHAT_QUEUE)
-                .withArgument("x-dead-letter-exchange", MessagingExchanges.SUPPORT_EVENTS_EXCHANGE)
-                .withArgument("x-dead-letter-routing-key", MessagingQueues.CHAT_DLQ)
-                .build();
-        Queue chatDlq = QueueBuilder.durable(MessagingQueues.CHAT_DLQ).build();
-        Binding chatBinding = BindingBuilder.bind(chatQueue).to(supportExchange).with("chat.#");
-
-        Queue emailQueue = QueueBuilder.durable(MessagingQueues.EMAIL_QUEUE)
-                .withArgument("x-dead-letter-exchange", MessagingExchanges.NOTIFICATION_EXCHANGE)
-                .withArgument("x-dead-letter-routing-key", MessagingQueues.EMAIL_DLQ)
-                .build();
-        Queue emailDlq = QueueBuilder.durable(MessagingQueues.EMAIL_DLQ).build();
-        Binding emailBinding = BindingBuilder.bind(emailQueue).to(notificationExchange).with("notification.email.send");
-
-        Queue deliveryRetryQueue = QueueBuilder.durable(MessagingQueues.DELIVERY_RETRY_QUEUE)
-                .withArgument("x-dead-letter-exchange", MessagingExchanges.NOTIFICATION_EXCHANGE)
-                .withArgument("x-dead-letter-routing-key", MessagingQueues.DELIVERY_RETRY_DLQ)
-                .build();
-        Queue deliveryRetryDlq = QueueBuilder.durable(MessagingQueues.DELIVERY_RETRY_DLQ).build();
-        Binding deliveryRetryBinding = BindingBuilder.bind(deliveryRetryQueue).to(notificationExchange).with(MessagingRoutingKeys.DELIVERY_RETRY);
-
-        Queue deliveryDeadQueue = QueueBuilder.durable(MessagingQueues.DELIVERY_DEAD_QUEUE).build();
-        Binding deliveryDeadBinding = BindingBuilder.bind(deliveryDeadQueue).to(notificationExchange).with(MessagingRoutingKeys.DELIVERY_DEAD);
+        // Dead Letter Queue & Binding
+        Queue deadLetterQueue = QueueBuilder.durable(queues.getDeadLetter()).build();
+        Binding deadLetterBinding = BindingBuilder.bind(deadLetterQueue)
+                .to(dlxExchange)
+                .with(routingKeys.getDeliveryDead());
 
         return new Declarables(
                 systemExchange,
                 userExchange,
                 notificationExchange,
                 supportExchange,
+                retryExchange,
+                dlxExchange,
+                userNotificationQueue,
+                userNotificationBinding,
+                emailQueue,
+                emailBinding,
                 supportQueue,
-                supportDlq,
                 supportBinding,
                 chatQueue,
-                chatDlq,
                 chatBinding,
-                emailQueue,
-                emailDlq,
-                emailBinding,
-                forumxNotificationExchange,
-                forumxNotificationQueue,
-                forumxNotificationBinding,
-                retryExchange,
                 retryQueue,
                 retryBinding,
-                dlxExchange,
                 deadLetterQueue,
-                deadLetterBinding,
-                deliveryRetryQueue,
-                deliveryRetryDlq,
-                deliveryRetryBinding,
-                deliveryDeadQueue,
-                deliveryDeadBinding
+                deadLetterBinding
         );
     }
 }

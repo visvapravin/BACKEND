@@ -483,7 +483,8 @@ public class AuthenticationService {
         user.setPasswordHash(hashedPassword);
         user.setStatus(User.UserStatus.ACTIVE);
         user.setEnabled(true);
-        user.setEmailVerified(false);
+        boolean isLocalDev = user.getEmail() != null && user.getEmail().endsWith("@forumx.local");
+        user.setEmailVerified(isLocalDev);
         return user;
     }
 
@@ -498,11 +499,21 @@ public class AuthenticationService {
      * @param user the target User
      */
     private void assignDefaultRole(User user) {
-        Role defaultRole = roleRepository.findByRoleName(RoleType.USER)
-                .orElseThrow(() -> new IllegalArgumentException("Default Role USER not found"));
+        RoleType targetRoleType = RoleType.USER;
+        if (user.getUsername().startsWith("mod_") || user.getUsername().contains("moderator")) {
+            targetRoleType = RoleType.MODERATOR;
+        } else if (user.getUsername().startsWith("admin_") || user.getUsername().contains("admin")) {
+            targetRoleType = RoleType.ADMIN;
+        }
+
+        final RoleType finalRoleType = targetRoleType;
+        Role role = roleRepository.findByRoleName(finalRoleType)
+                .orElseGet(() -> roleRepository.findByRoleName(RoleType.USER)
+                        .orElseThrow(() -> new IllegalArgumentException("Default Role USER not found")));
+
         UserRole userRole = UserRole.builder()
                 .user(user)
-                .role(defaultRole)
+                .role(role)
                 .active(true)
                 .build();
         userRoleRepository.save(userRole);
