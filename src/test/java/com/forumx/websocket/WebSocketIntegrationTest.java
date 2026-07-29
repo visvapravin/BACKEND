@@ -57,7 +57,7 @@ public class WebSocketIntegrationTest {
     private int port;
 
     @Autowired private com.forumx.security.jwt.JwtTokenProvider jwtTokenProvider;
-    @Autowired private VerificationTokenRepository verificationTokenRepository;
+    @Autowired private com.forumx.auth.verification.repository.VerificationTokenRepository verificationTokenRepository;
     @Autowired private TenantRepository tenantRepository;
     @Autowired private UserRepository userRepository;
     @Autowired private RoleRepository roleRepository;
@@ -75,6 +75,7 @@ public class WebSocketIntegrationTest {
     @Autowired private TicketMessageRepository ticketMessageRepository;
     @Autowired private com.forumx.answer.repository.AnswerRepository answerRepository;
     @Autowired private com.forumx.moderation.repository.ModerationReportRepository reportRepository;
+    @Autowired private com.forumx.support.chat.repository.SupportSessionParticipantRepository supportSessionParticipantRepository;
     @Autowired private RealtimeGateway realtimeGateway;
     @Autowired private ObjectMapper objectMapper;
 
@@ -91,8 +92,10 @@ public class WebSocketIntegrationTest {
         commentRepository.deleteAllInBatch();
         bookmarkRepository.deleteAllInBatch();
         notificationRepository.deleteAllInBatch();
+        supportSessionParticipantRepository.deleteAllInBatch();
         chatMessageRepository.deleteAllInBatch();
         chatSessionRepository.deleteAllInBatch();
+
         ticketRepository.deleteAllInBatch();
         answerRepository.deleteAllInBatch();
         questionRepository.deleteAllInBatch();
