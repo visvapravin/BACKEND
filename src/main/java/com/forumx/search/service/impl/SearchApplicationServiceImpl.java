@@ -110,7 +110,7 @@ public class SearchApplicationServiceImpl implements SearchApplicationService {
             var details = authenticationFacade.getCurrentUserDetails();
             if (details != null && details.getAuthorities() != null) {
                 return details.getAuthorities().stream()
-                        .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN") || a.getAuthority().equals("ROLE_SUPER_ADMIN"));
+                        .anyMatch(a -> a.getAuthority().equals("ROLE_TENANT_ADMIN") || a.getAuthority().equals("ROLE_PLATFORM_ADMIN") || a.getAuthority().equals("ROLE_ADMIN") || a.getAuthority().equals("ROLE_SUPER_ADMIN"));
             }
         } catch (Exception ignored) {}
         return false;

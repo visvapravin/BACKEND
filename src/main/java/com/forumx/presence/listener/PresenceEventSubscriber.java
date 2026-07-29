@@ -52,10 +52,11 @@ public class PresenceEventSubscriber implements RedisSubscriber {
 
             RealtimeEvent<UserPresence> realtimeEvent = realtimeMapper.toRealtimeEvent(event);
 
-            realtimeGateway.sendToTopic("/topic/presence", realtimeEvent);
+            String topic = "/topic/tenants/" + event.tenantId() + "/presence";
+            realtimeGateway.sendToTopic(topic, realtimeEvent);
 
-            log.info("Successfully broadcast presence update to WebSocket topic. userId={}, status={}",
-                    event.userId(), event.status());
+            log.info("Successfully broadcast presence update to WebSocket topic. topic={}, userId={}, status={}",
+                    topic, event.userId(), event.status());
         } catch (Exception e) {
             log.error("Failed to process presence update from Redis channel", e);
         }

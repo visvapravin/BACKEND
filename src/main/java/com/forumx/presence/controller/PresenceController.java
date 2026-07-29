@@ -37,60 +37,32 @@ public class PresenceController {
     private final PresenceService presenceService;
     private final AuthenticationFacade authenticationFacade;
     private final TenantResolver tenantResolver;
-
-    @GetMapping("/me")
-    @Operation(
-            summary = "Get current user presence",
-            description = "Retrieves real-time online status, session count, and last seen for the authenticated user.",
-            responses = {
-                    @ApiResponse(responseCode = "200", description = "Presence info retrieved successfully",
-                            content = @Content(schema = @Schema(implementation = PresenceResponse.class))),
-                    @ApiResponse(responseCode = "401", description = "Unauthorized")
-            }
-    )
-    public ResponseEntity<PresenceResponse> getMyPresence() {
-        CustomUserDetails userDetails = getAuthenticatedUser();
-        UserPresence presence = presenceService.getPresence(userDetails.getUserId())
-                .orElseGet(() -> UserPresence.builder()
-                        .userId(userDetails.getUserId())
-                        .username(userDetails.getUsername())
-                        .tenantId(userDetails.getTenantId())
-                        .status(com.forumx.presence.dto.PresenceStatus.OFFLINE)
-                        .activeSessions(0)
-                        .build());
-        return ResponseEntity.ok(toPresenceResponse(presence));
-    }
-
-    @GetMapping("/{userId}")
-    @Operation(
-            summary = "Get user presence by ID",
-            description = "Retrieves presence status and last seen timestamp for a specific user.",
-            responses = {
-                    @ApiResponse(responseCode = "200", description = "User presence retrieved"),
-                    @ApiResponse(responseCode = "404", description = "User presence not found")
-            }
-    )
-    public ResponseEntity<PresenceResponse> getUserPresence(@PathVariable Long userId) {
-        UserPresence presence = presenceService.getPresence(userId)
-                .orElseThrow(() -> new EntityNotFoundException("Presence information not found for user ID: " + userId));
-        return ResponseEntity.ok(toPresenceResponse(presence));
-    }
+    private final com.forumx.auth.repository.UserRepository userRepository;
 
     @GetMapping("/online")
     @Operation(
             summary = "Get online users for tenant",
-            description = "Retrieves list of all currently online users under the active tenant.",
+            description = "Retrieves list of all currently online users under the active tenant with optional role filtering.",
             responses = {
                     @ApiResponse(responseCode = "200", description = "List of online users returned",
                             content = @Content(schema = @Schema(implementation = OnlineUsersResponse.class)))
             }
     )
-    public ResponseEntity<OnlineUsersResponse> getOnlineUsers() {
+    public ResponseEntity<OnlineUsersResponse> getOnlineUsers(
+            @org.springframework.web.bind.annotation.RequestParam(required = false) com.forumx.auth.enums.RoleType role) {
         Long tenantId = tenantResolver.resolveTenantId();
         if (tenantId == null) {
             throw new AccessDeniedException("No tenant context available");
         }
         List<UserPresence> onlineList = presenceService.getTenantOnlineUsers(tenantId);
+        if (role != null) {
+            List<com.forumx.auth.enums.RoleType> targetRoles = (role == com.forumx.auth.enums.RoleType.MODERATOR)
+                    ? List.of(com.forumx.auth.enums.RoleType.MODERATOR, com.forumx.auth.enums.RoleType.TENANT_ADMIN, com.forumx.auth.enums.RoleType.PLATFORM_ADMIN)
+                    : List.of(role);
+            java.util.Set<Long> allowedUserIds = userRepository.findUsersByTenantIdAndRoles(tenantId, targetRoles)
+                    .stream().map(com.forumx.auth.entity.User::getId).collect(java.util.stream.Collectors.toSet());
+            onlineList = onlineList.stream().filter(p -> allowedUserIds.contains(p.getUserId())).toList();
+        }
         List<PresenceSummary> summaries = onlineList.stream()
                 .map(p -> new PresenceSummary(
                         p.getUserId(),
@@ -107,7 +79,7 @@ public class PresenceController {
     @GetMapping("/tenant/online")
     @Operation(summary = "Get online users for tenant (Alias)", description = "Alias endpoint for tenant online listing.")
     public ResponseEntity<OnlineUsersResponse> getTenantOnlineUsers() {
-        return getOnlineUsers();
+        return getOnlineUsers(null);
     }
 
     @GetMapping("/count")

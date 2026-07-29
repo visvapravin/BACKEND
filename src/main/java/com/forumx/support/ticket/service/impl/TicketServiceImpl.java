@@ -47,6 +47,8 @@ public class TicketServiceImpl implements TicketService {
     private final org.springframework.context.ApplicationEventPublisher eventPublisher;
     private final com.forumx.support.chat.service.ChatSessionService chatSessionService;
     private final com.forumx.support.chat.repository.ChatSessionRepository chatSessionRepository;
+    private final com.forumx.presence.service.PresenceService presenceService;
+    private final com.forumx.support.ticket.policy.TicketStatusTransitionPolicy transitionPolicy;
 
     @Override
     @Transactional
@@ -72,7 +74,7 @@ public class TicketServiceImpl implements TicketService {
         // Find moderators, admins, and super admins to notify (excluding creator self-notification)
         java.util.List<User> moderators = userRepository.findUsersByTenantIdAndRoles(
                 current.tenantId(),
-                java.util.List.of(RoleType.MODERATOR, RoleType.ADMIN, RoleType.SUPER_ADMIN)
+                java.util.List.of(RoleType.MODERATOR, RoleType.TENANT_ADMIN, RoleType.PLATFORM_ADMIN)
         );
 
         for (User moderator : moderators) {
@@ -114,12 +116,43 @@ public class TicketServiceImpl implements TicketService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<TicketResponse> getMyTickets(Pageable pageable) {
+    public Page<TicketResponse> getMyTickets(TicketStatus status, Pageable pageable) {
         CurrentUser current = resolveCurrentUser();
-        Page<Ticket> tickets = elevated(current.details())
-                ? ticketRepository.findByTenant_IdAndDeletedFalse(current.tenantId(), pageable)
-                : ticketRepository.findByCreator_IdAndTenant_IdAndDeletedFalse(current.userId(), current.tenantId(), pageable);
+        Page<Ticket> tickets;
+        if (elevated(current.details())) {
+            tickets = status != null
+                    ? ticketRepository.findByTenant_IdAndStatusAndDeletedFalse(current.tenantId(), status, pageable)
+                    : ticketRepository.findByTenant_IdAndDeletedFalse(current.tenantId(), pageable);
+        } else {
+            tickets = status != null
+                    ? ticketRepository.findByCreator_IdAndTenant_IdAndStatusAndDeletedFalse(current.userId(), current.tenantId(), status, pageable)
+                    : ticketRepository.findByCreator_IdAndTenant_IdAndDeletedFalse(current.userId(), current.tenantId(), pageable);
+        }
         return tickets.map(ticketMapper::toResponse);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public com.forumx.support.ticket.dto.response.SupportDashboardSummary getDashboardSummary() {
+        CurrentUser current = requireElevatedUser();
+        Long tenantId = current.tenantId();
+
+        long waiting = ticketRepository.countByTenant_IdAndStatusAndDeletedFalse(tenantId, TicketStatus.OPEN);
+        long open = ticketRepository.countByTenant_IdAndStatusAndDeletedFalse(tenantId, TicketStatus.IN_PROGRESS);
+        long closed = ticketRepository.countByTenant_IdAndStatusInAndDeletedFalse(
+                tenantId, java.util.List.of(TicketStatus.RESOLVED, TicketStatus.CLOSED));
+
+        LocalDateTime startOfDay = java.time.LocalDate.now(java.time.ZoneOffset.UTC).atStartOfDay();
+        long resolvedToday = ticketRepository.countByTenant_IdAndResolvedAtGreaterThanEqualAndDeletedFalse(tenantId, startOfDay);
+
+        java.util.List<com.forumx.presence.dto.UserPresence> onlineList = presenceService.getTenantOnlineUsers(tenantId);
+        java.util.List<RoleType> modRoles = java.util.List.of(RoleType.MODERATOR, RoleType.TENANT_ADMIN, RoleType.PLATFORM_ADMIN);
+        java.util.Set<Long> modUserIds = userRepository.findUsersByTenantIdAndRoles(tenantId, modRoles)
+                .stream().map(com.forumx.auth.entity.User::getId).collect(java.util.stream.Collectors.toSet());
+        long onlineModerators = onlineList.stream().filter(p -> modUserIds.contains(p.getUserId())).count();
+
+        return new com.forumx.support.ticket.dto.response.SupportDashboardSummary(
+                waiting, open, closed, resolvedToday, onlineModerators);
     }
 
     @Override
@@ -128,17 +161,24 @@ public class TicketServiceImpl implements TicketService {
         CurrentUser current = requireElevatedUser();
         Ticket ticket = loadTenantTicket(ticketId, current.tenantId());
         String oldStatus = ticket.getStatus().name();
+
+        transitionPolicy.validateTransition(ticket.getStatus(), request.getStatus());
+
         ticket.setStatus(request.getStatus());
         LocalDateTime now = LocalDateTime.now();
         if (request.getStatus() == TicketStatus.RESOLVED) {
             ticket.setResolvedAt(now);
+            chatSessionService.updateSessionStatusByTicket(ticketId, current.tenantId(), com.forumx.support.chat.entity.ChatSessionStatus.RESOLVED);
         } else if (request.getStatus() == TicketStatus.CLOSED) {
             ticket.setClosedAt(now);
+            chatSessionService.updateSessionStatusByTicket(ticketId, current.tenantId(), com.forumx.support.chat.entity.ChatSessionStatus.CLOSED);
+        } else if (request.getStatus() == TicketStatus.REOPENED) {
+            com.forumx.support.chat.entity.ChatSessionStatus reopenedChatStatus = (ticket.getAssignedTo() != null)
+                    ? com.forumx.support.chat.entity.ChatSessionStatus.ACTIVE
+                    : com.forumx.support.chat.entity.ChatSessionStatus.WAITING;
+            chatSessionService.updateSessionStatusByTicket(ticketId, current.tenantId(), reopenedChatStatus);
         }
         Ticket saved = ticketRepository.save(ticket);
-        if (request.getStatus() == TicketStatus.RESOLVED || request.getStatus() == TicketStatus.CLOSED) {
-            chatSessionService.closeSessionByTicketId(ticketId, current.tenantId());
-        }
 
         // Publish SupportTicketStatusChangedEvent for Live Support Queue
         eventPublisher.publishEvent(new com.forumx.support.queue.event.SupportTicketStatusChangedEvent(
@@ -164,15 +204,19 @@ public class TicketServiceImpl implements TicketService {
             throw new AccessDeniedException("Assigned user does not belong to the current tenant");
         }
         ticket.setAssignedTo(assignee);
+        if (ticket.getStatus() == TicketStatus.OPEN) {
+            ticket.setStatus(TicketStatus.IN_PROGRESS);
+        }
         Ticket saved = ticketRepository.save(ticket);
 
-        // Update ChatSession lead moderator for reference
+        // Update ChatSession lead moderator and auto-join assignee as participant (bypassing online check for system assignment)
         chatSessionRepository.findByTicket_IdAndTenant_IdAndDeletedFalse(saved.getId(), current.tenantId())
                 .ifPresent(session -> {
                     session.setModerator(assignee);
-                    session.setStatus(com.forumx.support.chat.entity.ChatSessionStatus.ACTIVE);
                     chatSessionRepository.save(session);
                 });
+
+        chatSessionService.joinRoom(saved.getId(), assignee, com.forumx.support.chat.entity.ParticipantRole.LEAD_MODERATOR, true);
 
         // Publish SupportTicketClaimedEvent for Live Support Queue
         eventPublisher.publishEvent(new com.forumx.support.queue.event.SupportTicketClaimedEvent(
@@ -219,9 +263,11 @@ public class TicketServiceImpl implements TicketService {
 
     private boolean elevated(CustomUserDetails details) {
         return details.getAuthorities().stream().map(GrantedAuthority::getAuthority)
-                .anyMatch(authority -> authority.equals("ROLE_ADMIN")
-                        || authority.equals("ROLE_SUPER_ADMIN")
-                        || authority.equals("ROLE_MODERATOR"));
+                .anyMatch(authority -> authority.equals("ROLE_TENANT_ADMIN")
+                        || authority.equals("ROLE_PLATFORM_ADMIN")
+                        || authority.equals("ROLE_MODERATOR")
+                        || authority.equals("ROLE_ADMIN")
+                        || authority.equals("ROLE_SUPER_ADMIN"));
     }
 
     private record CurrentUser(Long userId, Long tenantId, User user, CustomUserDetails details) {

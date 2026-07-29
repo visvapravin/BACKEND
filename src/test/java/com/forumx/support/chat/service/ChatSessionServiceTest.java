@@ -79,12 +79,21 @@ public class ChatSessionServiceTest {
     public void testGetOrCreateSessionCreatesNewAndRegistersCustomerParticipant() {
         when(chatSessionRepository.findByTicket_IdAndTenant_IdAndDeletedFalse(100L, 1L))
                 .thenReturn(Optional.empty());
-        when(chatSessionRepository.save(any(ChatSession.class))).thenReturn(chatSession);
+        
+        ChatSession waitingSession = ChatSession.builder()
+                .id(200L)
+                .ticket(ticket)
+                .tenant(tenant)
+                .customer(customer)
+                .status(ChatSessionStatus.WAITING)
+                .build();
+        when(chatSessionRepository.save(any(ChatSession.class))).thenReturn(waitingSession);
 
         ChatSession result = chatSessionService.getOrCreateSession(ticket, 1L);
 
         assertNotNull(result);
         assertEquals(200L, result.getId());
+        assertEquals(ChatSessionStatus.WAITING, result.getStatus());
         verify(participantRepository).save(any(SupportSessionParticipant.class));
     }
 

@@ -54,22 +54,25 @@ public class ChatStompController {
             throw new AccessDeniedException("Unauthorized");
         }
 
-        // Checks participant access and that the session is ACTIVE
+        // Checks participant access and that the session is ACTIVE or WAITING
         chatPermissionService.assertCanSend(session, context.getUserId());
 
+        String displayName = context.getUsername();
         if (payload != null && "START".equalsIgnoreCase(payload.getAction())) {
             eventPublisher.publishEvent(new TypingStartedEvent(
                     session.getId(),
                     session.getTenant().getId(),
                     context.getUserId(),
-                    context.getUsername()
+                    context.getUsername(),
+                    displayName
             ));
         } else if (payload != null && "STOP".equalsIgnoreCase(payload.getAction())) {
             eventPublisher.publishEvent(new TypingStoppedEvent(
                     session.getId(),
                     session.getTenant().getId(),
                     context.getUserId(),
-                    context.getUsername()
+                    context.getUsername(),
+                    displayName
             ));
         }
     }

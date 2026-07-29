@@ -115,7 +115,7 @@ public class TicketMessageServiceImpl implements TicketMessageService {
             } else {
                 java.util.List<User> moderators = userRepository.findUsersByTenantIdAndRoles(
                         current.tenantId(),
-                        java.util.List.of(RoleType.MODERATOR, RoleType.ADMIN, RoleType.SUPER_ADMIN)
+                        java.util.List.of(RoleType.MODERATOR, RoleType.TENANT_ADMIN, RoleType.PLATFORM_ADMIN)
                 );
                 for (User moderator : moderators) {
                     if (!moderator.getId().equals(current.userId())) {
@@ -167,9 +167,11 @@ public class TicketMessageServiceImpl implements TicketMessageService {
 
     private boolean elevated(CustomUserDetails details) {
         return details.getAuthorities().stream().map(GrantedAuthority::getAuthority)
-                .anyMatch(authority -> authority.equals("ROLE_ADMIN")
-                        || authority.equals("ROLE_SUPER_ADMIN")
-                        || authority.equals("ROLE_MODERATOR"));
+                .anyMatch(authority -> authority.equals("ROLE_TENANT_ADMIN")
+                        || authority.equals("ROLE_PLATFORM_ADMIN")
+                        || authority.equals("ROLE_MODERATOR")
+                        || authority.equals("ROLE_ADMIN")
+                        || authority.equals("ROLE_SUPER_ADMIN"));
     }
 
     private record CurrentUser(Long userId, Long tenantId, User user, CustomUserDetails details) {

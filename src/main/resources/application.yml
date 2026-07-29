@@ -64,8 +64,8 @@ spring:
   mail:
     host: smtp.gmail.com
     port: 587
-    username: backendforumx@gmail.com
-    password: mjywpgfutvcpibes
+    username: ${SPRING_MAIL_USERNAME}
+    password: ${SPRING_MAIL_PASSWORD}
     properties:
       mail:
         smtp:
@@ -151,7 +151,7 @@ app:
     client-id: 924087041522-fqdejb0kii9a98v34ci0bslm50iesq61.apps.googleusercontent.com
   security:
     jwt:
-      secret: QXOD/DAudr+HAihW+OyEhRlp47+XzvBpLrPzbNTbDhR7MqQSTxSImzckXajMAWTjsECRmHJXbyM4IGuLCgqZqQ==
+      secret: ${APP_SECURITY_JWT_SECRET}
       issuer: ForumX
       access-token-expiration: 15m
       refresh-token-expiration: 7d
@@ -168,6 +168,12 @@ app:
 # ForumX – Module Configuration
 # ---------------------------------------------------------------
 forumx:
+  bootstrap:
+    platform-admin:
+      enabled: ${FORUMX_BOOTSTRAP_PLATFORM_ADMIN:false}
+      email: ${FORUMX_BOOTSTRAP_PLATFORM_ADMIN_EMAIL:}
+      username: ${FORUMX_BOOTSTRAP_PLATFORM_ADMIN_USERNAME:}
+      password: ${FORUMX_BOOTSTRAP_PLATFORM_ADMIN_PASSWORD:}
   # Redis – Upstash (Lettuce + TLS + connection pooling)
   # RedisConfig reads ONLY from forumx.redis.* via RedisProperties.
   # spring.data.redis.* is NOT used (we build LettuceConnectionFactory manually).
@@ -175,7 +181,7 @@ forumx:
     enabled: true
     host: national-liger-179032.upstash.io
     port: 6379
-    password: gQAAAAAAArtYAAIgcDFjNjJiZjM4NzM1YTI0MzU1ODM5MDQ5YWZjZmJjNmMyOA
+    password: ${FORUMX_REDIS_PASSWORD}
     ssl: true
     database: 0
     timeout: 5s
@@ -195,8 +201,8 @@ forumx:
     enabled: true
     host: puffin.rmq2.cloudamqp.com
     port: 5671
-    username: bjqdpchc
-    password: VvSBPPtPyxwK1pBMcqVQGIFGVlaa-8f5
+    username: ${FORUMX_MESSAGING_USERNAME}
+    password: ${FORUMX_MESSAGING_PASSWORD}
     virtual-host: bjqdpchc
     ssl: true
     publisher-confirm-type: correlated
@@ -305,6 +311,12 @@ management:
   endpoint:
     health:
       show-details: always
+
+app:
+  security:
+    jwt:
+      # Development/test-only signing key; production must provide APP_SECURITY_JWT_SECRET.
+      secret: ${APP_SECURITY_JWT_SECRET:QUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQQ==}
 
 logging:
   level:

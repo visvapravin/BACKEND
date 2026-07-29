@@ -28,8 +28,8 @@ public class ChatPermissionServiceImpl implements ChatPermissionService {
 
     @Override
     public void assertCanSend(ChatSession session, Long userId) {
-        if (session.getStatus() == ChatSessionStatus.CLOSED) {
-            throw new IllegalStateException("Cannot send message. Chat session is closed.");
+        if (session.getStatus() == ChatSessionStatus.CLOSED || session.getStatus() == ChatSessionStatus.RESOLVED) {
+            throw new IllegalStateException("Cannot send message. Chat session is " + session.getStatus().name().toLowerCase() + ".");
         }
         boolean isCustomer = session.getCustomer() != null && session.getCustomer().getId().equals(userId);
         boolean isActiveParticipant = participantRepository.existsBySession_Ticket_IdAndUser_IdAndIsActiveTrue(session.getTicket().getId(), userId);
@@ -42,7 +42,7 @@ public class ChatPermissionServiceImpl implements ChatPermissionService {
     @Override
     public void assertCanRead(ChatSession session, Long userId) {
         if (!canAccessSession(session, userId)) {
-            throw new AccessDeniedException("User is not a participant in this chat session");
+            throw new AccessDeniedException("User is not authorized to view this chat session");
         }
     }
 
@@ -54,8 +54,8 @@ public class ChatPermissionServiceImpl implements ChatPermissionService {
         if (message.isDeleted()) {
             throw new IllegalStateException("Message is already deleted.");
         }
-        if (session.getStatus() == ChatSessionStatus.CLOSED) {
-            throw new IllegalStateException("Cannot delete message. Chat session is closed.");
+        if (session.getStatus() == ChatSessionStatus.CLOSED || session.getStatus() == ChatSessionStatus.RESOLVED) {
+            throw new IllegalStateException("Cannot delete message. Chat session is " + session.getStatus().name().toLowerCase() + ".");
         }
     }
 
@@ -66,15 +66,19 @@ public class ChatPermissionServiceImpl implements ChatPermissionService {
         if (session.getModerator() != null && session.getModerator().getId().equals(userId)) {
             return true;
         }
-        if (participantRepository.existsBySession_Ticket_IdAndUser_IdAndIsActiveTrue(session.getTicket().getId(), userId)) {
+        if (participantRepository.existsBySession_Ticket_IdAndUser_Id(session.getTicket().getId(), userId)) {
             return true;
         }
         CustomUserDetails details = authenticationFacade.getCurrentUserDetails();
-        if (details != null && details.getUserId().equals(userId)) {
-            return details.getAuthorities().stream()
-                    .map(GrantedAuthority::getAuthority)
-                    .anyMatch(auth -> auth.equals("ROLE_MODERATOR") || auth.equals("ROLE_ADMIN") || auth.equals("ROLE_SUPER_ADMIN"));
-        }
-        return false;
+        return details != null && isElevated(details);
+    }
+
+    private boolean isElevated(CustomUserDetails details) {
+        return details.getAuthorities().stream().map(GrantedAuthority::getAuthority)
+                .anyMatch(authority -> authority.equals("ROLE_TENANT_ADMIN")
+                        || authority.equals("ROLE_PLATFORM_ADMIN")
+                        || authority.equals("ROLE_MODERATOR")
+                        || authority.equals("ROLE_ADMIN")
+                        || authority.equals("ROLE_SUPER_ADMIN"));
     }
 }

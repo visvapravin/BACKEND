@@ -10,7 +10,8 @@ import org.springframework.data.domain.Pageable;
 public interface TicketService {
     TicketResponse createTicket(CreateTicketRequest request);
     TicketResponse getTicket(Long ticketId);
-    Page<TicketResponse> getMyTickets(Pageable pageable);
+    Page<TicketResponse> getMyTickets(com.forumx.support.ticket.entity.TicketStatus status, Pageable pageable);
     TicketResponse updateStatus(Long ticketId, UpdateTicketStatusRequest request);
     TicketResponse assignTicket(Long ticketId, AssignTicketRequest request);
+    com.forumx.support.ticket.dto.response.SupportDashboardSummary getDashboardSummary();
 }

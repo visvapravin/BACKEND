@@ -27,7 +27,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/notification-deliveries")
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
+@PreAuthorize("hasAnyRole('TENANT_ADMIN', 'PLATFORM_ADMIN', 'ADMIN', 'SUPER_ADMIN')")
 public class NotificationDeliveryController {
 
     private final NotificationDeliveryAttemptRepository attemptRepository;

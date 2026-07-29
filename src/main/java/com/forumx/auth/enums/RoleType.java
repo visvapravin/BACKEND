@@ -1,9 +1,10 @@
 package com.forumx.auth.enums;
 
 public enum RoleType {
-    SUPER_ADMIN,
-    ADMIN,
+    PLATFORM_ADMIN,
+    TENANT_ADMIN,
     MODERATOR,
     USER,
     GUEST
 }
+

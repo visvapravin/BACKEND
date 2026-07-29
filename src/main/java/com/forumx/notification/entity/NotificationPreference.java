@@ -16,6 +16,7 @@ import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -59,15 +60,19 @@ public class NotificationPreference extends BaseEntity {
     @Column(name = "notification_type", nullable = false, length = 50)
     private NotificationType notificationType;
 
+    @Builder.Default
     @Column(name = "email_enabled", nullable = false)
     private boolean emailEnabled = true;
 
+    @Builder.Default
     @Column(name = "websocket_enabled", nullable = false)
     private boolean webSocketEnabled = true;
 
+    @Builder.Default
     @Column(name = "push_enabled", nullable = false)
     private boolean pushEnabled = false;
 
+    @Builder.Default
     @Column(name = "digest_enabled", nullable = false)
     private boolean digestEnabled = false;
 }

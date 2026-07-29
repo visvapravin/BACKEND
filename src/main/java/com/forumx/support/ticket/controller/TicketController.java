@@ -24,6 +24,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -44,8 +45,15 @@ public class TicketController {
     @GetMapping
     @Operation(summary = "List support tickets")
     public ResponseEntity<Page<TicketResponse>> getMyTickets(
+            @RequestParam(required = false) com.forumx.support.ticket.entity.TicketStatus status,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
-        return ResponseEntity.ok(ticketService.getMyTickets(pageable));
+        return ResponseEntity.ok(ticketService.getMyTickets(status, pageable));
+    }
+
+    @GetMapping("/dashboard/summary")
+    @Operation(summary = "Get moderator support dashboard summary")
+    public ResponseEntity<com.forumx.support.ticket.dto.response.SupportDashboardSummary> getDashboardSummary() {
+        return ResponseEntity.ok(ticketService.getDashboardSummary());
     }
 
     @GetMapping("/{ticketId}")

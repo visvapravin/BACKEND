@@ -43,10 +43,12 @@ public class SupportQueueEventSubscriber implements EventSubscriber {
             SupportQueueEvent queueEvent = parsePayload(envelope);
             var realtimeEvent = realtimeMapper.toRealtimeEvent(envelope.eventType(), queueEvent);
 
-            log.info("Broadcasting support queue event to WebSocket topic. topic={}, eventType={}, ticketId={}, tenantId={}",
-                    SUPPORT_QUEUE_TOPIC, envelope.eventType(), queueEvent.ticketId(), queueEvent.tenantId());
+            String topic = "/topic/tenants/" + queueEvent.tenantId() + "/support/queue";
 
-            realtimeGateway.sendToTopic(SUPPORT_QUEUE_TOPIC, realtimeEvent);
+            log.info("Broadcasting support queue event to WebSocket topic. topic={}, eventType={}, ticketId={}, tenantId={}",
+                    topic, envelope.eventType(), queueEvent.ticketId(), queueEvent.tenantId());
+
+            realtimeGateway.sendToTopic(topic, realtimeEvent);
 
             log.info("Successfully broadcast support queue event. ticketId={}, eventType={}",
                     queueEvent.ticketId(), envelope.eventType());

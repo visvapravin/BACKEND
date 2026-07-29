@@ -55,9 +55,9 @@ public class User extends BaseEntity {
 
     // ── Tenant ──────────────────────────────────────────────────────────
 
-    @NotNull
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "tenant_id", nullable = false, foreignKey = @ForeignKey(name = "fk_users_tenant"))
+    /** Null only for platform-scoped PLATFORM_ADMIN identities. */
+    @ManyToOne(fetch = FetchType.LAZY, optional = true)
+    @JoinColumn(name = "tenant_id", nullable = true, foreignKey = @ForeignKey(name = "fk_users_tenant"))
     private Tenant tenant;
 
     // ── Identity ────────────────────────────────────────────────────────

@@ -9,6 +9,8 @@ public final class JwtClaimsConstants {
     public static final String EMAIL = "email";
     public static final String USER_ID = "user_id";
     public static final String TENANT_ID = "tenant_id";
+    public static final String TENANT_SLUG = "tenant_slug";
+    public static final String SCOPE = "scope";
     public static final String DISPLAY_NAME = "display_name";
     public static final String ROLES = "roles";
     public static final String PERMISSIONS = "permissions";

@@ -114,9 +114,17 @@ public class ChatEventPublisher {
     public void onTypingStarted(TypingStartedEvent event) {
         log.debug("Handling transient typing started event. sessionId={}, userId={}", 
                 event.sessionId(), event.userId());
+        TypingPayload payload = TypingPayload.builder()
+                .action("START")
+                .sessionId(event.sessionId())
+                .userId(event.userId())
+                .username(event.username())
+                .displayName(event.displayName())
+                .build();
+
         RealtimeEvent<TypingPayload> realtimeEvent = RealtimeEvent.<TypingPayload>builder()
                 .type("TYPING_STARTED")
-                .payload(new TypingPayload("START"))
+                .payload(payload)
                 .build();
         
         String destination = "/topic/tenants/" + event.tenantId() + "/chat/" + event.sessionId() + "/typing";
@@ -128,9 +136,17 @@ public class ChatEventPublisher {
     public void onTypingStopped(TypingStoppedEvent event) {
         log.debug("Handling transient typing stopped event. sessionId={}, userId={}", 
                 event.sessionId(), event.userId());
+        TypingPayload payload = TypingPayload.builder()
+                .action("STOP")
+                .sessionId(event.sessionId())
+                .userId(event.userId())
+                .username(event.username())
+                .displayName(event.displayName())
+                .build();
+
         RealtimeEvent<TypingPayload> realtimeEvent = RealtimeEvent.<TypingPayload>builder()
                 .type("TYPING_STOPPED")
-                .payload(new TypingPayload("STOP"))
+                .payload(payload)
                 .build();
         
         String destination = "/topic/tenants/" + event.tenantId() + "/chat/" + event.sessionId() + "/typing";

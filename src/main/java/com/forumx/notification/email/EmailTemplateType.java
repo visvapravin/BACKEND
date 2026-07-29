@@ -6,5 +6,6 @@ public enum EmailTemplateType {
     TICKET_ASSIGNED,
     TICKET_CLOSED,
     CHAT_MESSAGE,
+    MODERATOR_INVITATION,
     GENERIC
 }

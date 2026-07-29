@@ -25,13 +25,27 @@ public class CustomUserDetailsService implements UserDetailsService {
     @Transactional(readOnly = true)
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
         Long tenantId = tenantResolver.resolveTenantId();
+        return loadUserByTenantIdAndUsername(tenantId, username);
+    }
 
-        User user = userRepository.findByTenantIdAndUsernameAndEnabledTrue(tenantId, username)
-                .or(() -> userRepository.findByTenantIdAndEmailAndEnabledTrue(tenantId, username))
+    @Transactional(readOnly = true)
+    public UserDetails loadUserByTenantIdAndUsername(Long tenantId, String username) throws UsernameNotFoundException {
+        if (tenantId == null) {
+            tenantId = tenantResolver.resolveTenantId();
+        }
+        final Long effectiveTenantId = tenantId;
+        User user = userRepository.findForAuthenticationByTenantIdAndUsernameOrEmail(effectiveTenantId, username)
                 .orElseThrow(() -> new UsernameNotFoundException(
-                        String.format("User not found with username/email: %s for tenant: %d", username, tenantId)
+                        String.format("User not found with username/email: %s for tenant: %d", username, effectiveTenantId)
                 ));
 
+        return new CustomUserDetails(user);
+    }
+
+    @Transactional(readOnly = true)
+    public UserDetails loadPlatformUserByUsername(String username) throws UsernameNotFoundException {
+        User user = userRepository.findPlatformUserForAuthentication(username)
+                .orElseThrow(() -> new UsernameNotFoundException("Platform user not found"));
         return new CustomUserDetails(user);
     }
 }

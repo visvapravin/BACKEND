@@ -163,7 +163,7 @@ public class AnswerServiceImpl implements AnswerService {
 
         // 4. Authorization check
         boolean isAuthor = currentUserDetails.getUserId().equals(answer.getAuthor().getId());
-        boolean isAuthorized = isAuthor || hasRole(currentUserDetails, RoleType.ADMIN) || hasRole(currentUserDetails, RoleType.MODERATOR);
+        boolean isAuthorized = isAuthor || hasRole(currentUserDetails, RoleType.TENANT_ADMIN) || hasRole(currentUserDetails, RoleType.PLATFORM_ADMIN) || hasRole(currentUserDetails, RoleType.MODERATOR);
         if (!isAuthorized) {
             throw new AccessDeniedException("User is not authorized to update this answer");
         }
@@ -196,7 +196,7 @@ public class AnswerServiceImpl implements AnswerService {
 
         // 4. Authorization check
         boolean isAuthor = currentUserDetails.getUserId().equals(answer.getAuthor().getId());
-        boolean isAuthorized = isAuthor || hasRole(currentUserDetails, RoleType.ADMIN) || hasRole(currentUserDetails, RoleType.MODERATOR);
+        boolean isAuthorized = isAuthor || hasRole(currentUserDetails, RoleType.TENANT_ADMIN) || hasRole(currentUserDetails, RoleType.PLATFORM_ADMIN) || hasRole(currentUserDetails, RoleType.MODERATOR);
         if (!isAuthorized) {
             throw new AccessDeniedException("User is not authorized to delete this answer");
         }

@@ -22,4 +22,12 @@ public interface SupportSessionParticipantRepository extends JpaRepository<Suppo
     Optional<SupportSessionParticipant> findTopBySession_Ticket_IdAndUser_IdOrderByJoinedAtDesc(Long ticketId, Long userId);
 
     boolean existsBySession_Ticket_IdAndUser_IdAndIsActiveTrue(Long ticketId, Long userId);
+
+    boolean existsBySession_Ticket_IdAndUser_Id(Long ticketId, Long userId);
+
+    /**
+     * Finds all active participation records for a given user across all tickets/sessions.
+     * Used by TenantStaffService to terminate a moderator's active support participations on account disable.
+     */
+    List<SupportSessionParticipant> findAllByUser_IdAndIsActiveTrue(Long userId);
 }

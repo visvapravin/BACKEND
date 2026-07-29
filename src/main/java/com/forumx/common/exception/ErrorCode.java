@@ -21,7 +21,17 @@ public enum ErrorCode {
     PASSWORDS_DO_NOT_MATCH("Passwords do not match"),
     PASSWORD_REUSE("Cannot reset password to the current password"),
     PASSWORD_NOT_SET("This account currently uses Google Sign-In. Create a password to enable email login."),
-    DOMAIN_INTEGRITY_VIOLATION("Domain integrity violation or database corruption detected");
+    DOMAIN_INTEGRITY_VIOLATION("Domain integrity violation or database corruption detected"),
+    INVITATION_NOT_FOUND("Invitation not found"),
+    INVITATION_EXPIRED("Invitation has expired"),
+    INVITATION_REVOKED("Invitation has been revoked"),
+    INVITATION_ALREADY_ACCEPTED("Invitation has already been accepted"),
+    INVITATION_ALREADY_PENDING("An active invitation already exists for this email"),
+    INVITATION_ALREADY_REVOKED("Invitation has already been revoked"),
+    EMAIL_ALREADY_REGISTERED("User account with this email already exists"),
+    MODERATOR_NOT_FOUND("Moderator not found"),
+    MODERATOR_ALREADY_DISABLED("Moderator account is already disabled"),
+    MODERATOR_ALREADY_ENABLED("Moderator account is already enabled");
 
     private final String defaultMessage;
 

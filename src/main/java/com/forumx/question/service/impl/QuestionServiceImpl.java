@@ -214,7 +214,10 @@ public class QuestionServiceImpl implements QuestionService {
         boolean isAuthor = currentUserDetails.getUserId().equals(question.getAuthor().getId());
         boolean isElevated = currentUserDetails.getAuthorities().stream()
                 .map(org.springframework.security.core.GrantedAuthority::getAuthority)
-                .anyMatch(auth -> auth.equals("ROLE_ADMINISTRATOR") ||
+                .anyMatch(auth -> auth.equals("ROLE_TENANT_ADMIN") ||
+                        auth.equals("ROLE_PLATFORM_ADMIN") ||
+                        auth.equals("ROLE_ADMIN") ||
+                        auth.equals("ROLE_SUPER_ADMIN") ||
                         auth.equals("ROLE_MODERATOR") ||
                         auth.equals("QUESTION_DELETE_ANY"));
 

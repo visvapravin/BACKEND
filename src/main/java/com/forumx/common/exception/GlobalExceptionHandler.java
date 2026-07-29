@@ -327,6 +327,28 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.error(ex.getMessage(), errorResponse, path));
     }
 
+    @ExceptionHandler(org.springframework.web.server.ResponseStatusException.class)
+    public ResponseEntity<ApiResponse<ErrorResponse>> handleResponseStatus(
+            org.springframework.web.server.ResponseStatusException ex,
+            WebRequest request
+    ) {
+        String path = resolvePath(request);
+        String requestId = resolveRequestId(request);
+        log.warn(formatLogMessage(request, "Response status exception: " + ex.getReason()));
+
+        ErrorResponse errorResponse = buildErrorResponse(
+                ErrorCode.RESOURCE_NOT_FOUND,
+                ex.getReason() != null ? ex.getReason() : ex.getMessage(),
+                path,
+                requestId,
+                null
+        );
+
+        return ResponseEntity
+                .status(ex.getStatusCode())
+                .body(ApiResponse.error(ex.getReason() != null ? ex.getReason() : "Error", errorResponse, path));
+    }
+
     /**
      * Handles DataIntegrityViolationException to prevent DB leaks.
      */
@@ -677,6 +699,72 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.error("Internal server error", errorResponse, path));
     }
 
+    @ExceptionHandler(InvitationNotFoundException.class)
+    public ResponseEntity<ApiResponse<ErrorResponse>> handleInvitationNotFound(
+            InvitationNotFoundException ex,
+            WebRequest request
+    ) {
+        String path = resolvePath(request);
+        String requestId = resolveRequestId(request);
+        log.warn(formatLogMessage(request, "Invitation not found: " + ex.getMessage()));
+
+        ErrorResponse errorResponse = buildErrorResponse(
+                ErrorCode.INVITATION_NOT_FOUND,
+                ex.getMessage(),
+                path,
+                requestId,
+                null
+        );
+
+        return ResponseEntity
+                .status(HttpStatus.NOT_FOUND)
+                .body(ApiResponse.error(ex.getMessage(), errorResponse, path));
+    }
+
+    @ExceptionHandler(InvitationAlreadyAcceptedException.class)
+    public ResponseEntity<ApiResponse<ErrorResponse>> handleInvitationAlreadyAccepted(
+            InvitationAlreadyAcceptedException ex,
+            WebRequest request
+    ) {
+        String path = resolvePath(request);
+        String requestId = resolveRequestId(request);
+        log.warn(formatLogMessage(request, "Invitation already accepted: " + ex.getMessage()));
+
+        ErrorResponse errorResponse = buildErrorResponse(
+                ErrorCode.INVITATION_ALREADY_ACCEPTED,
+                ex.getMessage(),
+                path,
+                requestId,
+                null
+        );
+
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error(ex.getMessage(), errorResponse, path));
+    }
+
+    @ExceptionHandler(InvitationAlreadyPendingException.class)
+    public ResponseEntity<ApiResponse<ErrorResponse>> handleInvitationAlreadyPending(
+            InvitationAlreadyPendingException ex,
+            WebRequest request
+    ) {
+        String path = resolvePath(request);
+        String requestId = resolveRequestId(request);
+        log.warn(formatLogMessage(request, "Invitation already pending: " + ex.getMessage()));
+
+        ErrorResponse errorResponse = buildErrorResponse(
+                ErrorCode.INVITATION_ALREADY_PENDING,
+                ex.getMessage(),
+                path,
+                requestId,
+                null
+        );
+
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(ApiResponse.error(ex.getMessage(), errorResponse, path));
+    }
+
     /**
      * Handles expired and invalid JWT authentication tokens.
      */
@@ -700,6 +788,108 @@ public class GlobalExceptionHandler {
         return ResponseEntity
                 .status(HttpStatus.UNAUTHORIZED)
                 .body(ApiResponse.error("Unauthorized", errorResponse, path));
+    }
+
+    // ── Phase C: Staff Management Exceptions ────────────────────────────
+
+    /**
+     * Handles ModeratorNotFoundException when a target user is not a moderator in the tenant.
+     */
+    @ExceptionHandler(ModeratorNotFoundException.class)
+    public ResponseEntity<ApiResponse<ErrorResponse>> handleModeratorNotFound(
+            ModeratorNotFoundException ex,
+            WebRequest request
+    ) {
+        String path = resolvePath(request);
+        String requestId = resolveRequestId(request);
+        log.warn(formatLogMessage(request, "Moderator not found: " + ex.getMessage()));
+
+        ErrorResponse errorResponse = buildErrorResponse(
+                ErrorCode.MODERATOR_NOT_FOUND,
+                ex.getMessage(),
+                path,
+                requestId,
+                null
+        );
+
+        return ResponseEntity
+                .status(HttpStatus.NOT_FOUND)
+                .body(ApiResponse.error(ex.getMessage(), errorResponse, path));
+    }
+
+    /**
+     * Handles InvitationAlreadyRevokedException.
+     */
+    @ExceptionHandler(InvitationAlreadyRevokedException.class)
+    public ResponseEntity<ApiResponse<ErrorResponse>> handleInvitationAlreadyRevoked(
+            InvitationAlreadyRevokedException ex,
+            WebRequest request
+    ) {
+        String path = resolvePath(request);
+        String requestId = resolveRequestId(request);
+        log.warn(formatLogMessage(request, "Invitation already revoked: " + ex.getMessage()));
+
+        ErrorResponse errorResponse = buildErrorResponse(
+                ErrorCode.INVITATION_ALREADY_REVOKED,
+                ex.getMessage(),
+                path,
+                requestId,
+                null
+        );
+
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(ApiResponse.error(ex.getMessage(), errorResponse, path));
+    }
+
+    /**
+     * Handles ModeratorAlreadyDisabledException.
+     */
+    @ExceptionHandler(ModeratorAlreadyDisabledException.class)
+    public ResponseEntity<ApiResponse<ErrorResponse>> handleModeratorAlreadyDisabled(
+            ModeratorAlreadyDisabledException ex,
+            WebRequest request
+    ) {
+        String path = resolvePath(request);
+        String requestId = resolveRequestId(request);
+        log.warn(formatLogMessage(request, "Moderator already disabled: " + ex.getMessage()));
+
+        ErrorResponse errorResponse = buildErrorResponse(
+                ErrorCode.MODERATOR_ALREADY_DISABLED,
+                ex.getMessage(),
+                path,
+                requestId,
+                null
+        );
+
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(ApiResponse.error(ex.getMessage(), errorResponse, path));
+    }
+
+    /**
+     * Handles ModeratorAlreadyEnabledException.
+     */
+    @ExceptionHandler(ModeratorAlreadyEnabledException.class)
+    public ResponseEntity<ApiResponse<ErrorResponse>> handleModeratorAlreadyEnabled(
+            ModeratorAlreadyEnabledException ex,
+            WebRequest request
+    ) {
+        String path = resolvePath(request);
+        String requestId = resolveRequestId(request);
+        log.warn(formatLogMessage(request, "Moderator already enabled: " + ex.getMessage()));
+
+        ErrorResponse errorResponse = buildErrorResponse(
+                ErrorCode.MODERATOR_ALREADY_ENABLED,
+                ex.getMessage(),
+                path,
+                requestId,
+                null
+        );
+
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(ApiResponse.error(ex.getMessage(), errorResponse, path));
     }
 
     /**

@@ -266,9 +266,11 @@ public class CommentServiceImpl implements CommentService {
     private boolean elevated(CustomUserDetails details) {
         return details.getAuthorities().stream()
                 .map(GrantedAuthority::getAuthority)
-                .anyMatch(authority -> authority.equals("ROLE_ADMIN")
-                        || authority.equals("ROLE_SUPER_ADMIN")
-                        || authority.equals("ROLE_MODERATOR"));
+                .anyMatch(authority -> authority.equals("ROLE_TENANT_ADMIN")
+                        || authority.equals("ROLE_PLATFORM_ADMIN")
+                        || authority.equals("ROLE_MODERATOR")
+                        || authority.equals("ROLE_ADMIN")
+                        || authority.equals("ROLE_SUPER_ADMIN"));
     }
 
     private record CurrentUser(Long userId, Long tenantId, User user, CustomUserDetails details) {

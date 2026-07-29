@@ -52,7 +52,7 @@ public class ModerationController {
     }
 
     @GetMapping("/reports")
-    @PreAuthorize("hasAnyRole('MODERATOR', 'ADMIN', 'SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('MODERATOR', 'TENANT_ADMIN', 'PLATFORM_ADMIN', 'ADMIN', 'SUPER_ADMIN')")
     @Operation(summary = "Get Moderation Queue", description = "Retrieve list of reports filtered by status, priority, and reason")
     @ApiResponse(responseCode = "200", description = "Successfully retrieved moderation queue reports")
     public ResponseEntity<Page<ModerationReportResponse>> getReports(
@@ -76,7 +76,7 @@ public class ModerationController {
     }
 
     @PutMapping("/reports/{id}/review")
-    @PreAuthorize("hasAnyRole('MODERATOR', 'ADMIN', 'SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('MODERATOR', 'TENANT_ADMIN', 'PLATFORM_ADMIN', 'ADMIN', 'SUPER_ADMIN')")
     @Operation(summary = "Claim Report for Review", description = "Mark the report as IN_REVIEW and assign it to the current moderator")
     @ApiResponse(responseCode = "200", description = "Successfully claimed report for review")
     public ResponseEntity<ModerationReportResponse> claimForReview(
@@ -87,7 +87,7 @@ public class ModerationController {
     }
 
     @PutMapping("/reports/{id}/decision")
-    @PreAuthorize("hasAnyRole('MODERATOR', 'ADMIN', 'SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('MODERATOR', 'TENANT_ADMIN', 'PLATFORM_ADMIN', 'ADMIN', 'SUPER_ADMIN')")
     @Operation(summary = "Apply Moderation Decision", description = "Commit a resolution action (warn, hide, delete, suspend, ban, reject) and record to audit logs")
     @ApiResponse(responseCode = "200", description = "Successfully applied moderation decision")
     public ResponseEntity<ModerationReportResponse> applyDecision(
@@ -99,7 +99,7 @@ public class ModerationController {
     }
 
     @GetMapping("/statistics")
-    @PreAuthorize("hasAnyRole('MODERATOR', 'ADMIN', 'SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('MODERATOR', 'TENANT_ADMIN', 'PLATFORM_ADMIN', 'ADMIN', 'SUPER_ADMIN')")
     @Operation(summary = "Get Moderation Statistics", description = "Retrieve open/closed counts, SLA resolution times, and categories")
     @ApiResponse(responseCode = "200", description = "Successfully retrieved moderation statistics")
     public ResponseEntity<ModerationStatisticsResponse> getStatistics() {
@@ -108,7 +108,7 @@ public class ModerationController {
     }
 
     @GetMapping("/reports/{id}/history")
-    @PreAuthorize("hasAnyRole('MODERATOR', 'ADMIN', 'SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('MODERATOR', 'TENANT_ADMIN', 'PLATFORM_ADMIN', 'ADMIN', 'SUPER_ADMIN')")
     @Operation(summary = "Get Report Audit Trail", description = "Retrieve immutable history log of all status transitions and actions for a report")
     @ApiResponse(responseCode = "200", description = "Successfully retrieved report history")
     public ResponseEntity<List<ModerationHistoryResponse>> getHistory(

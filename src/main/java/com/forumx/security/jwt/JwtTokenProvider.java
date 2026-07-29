@@ -75,7 +75,12 @@ public class JwtTokenProvider {
 
         if (userDetails instanceof CustomUserDetails customUserDetails) {
             extraClaims.put(JwtClaimsConstants.USER_ID, customUserDetails.getUserId());
-            extraClaims.put(JwtClaimsConstants.TENANT_ID, customUserDetails.getTenantId());
+            Long tenantId = customUserDetails.getTenantId();
+            extraClaims.put(JwtClaimsConstants.SCOPE, tenantId == null ? "PLATFORM" : "TENANT");
+            if (tenantId != null) {
+                extraClaims.put(JwtClaimsConstants.TENANT_ID, tenantId);
+                extraClaims.put(JwtClaimsConstants.TENANT_SLUG, customUserDetails.getUser().getTenant().getSlug());
+            }
 
             if (customUserDetails.getUser() != null) {
                 extraClaims.put(JwtClaimsConstants.EMAIL, customUserDetails.getUser().getEmail());

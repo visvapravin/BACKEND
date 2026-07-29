@@ -68,7 +68,7 @@ public class CustomUserDetails implements UserDetails {
     }
 
     public Long getTenantId() {
-        return user.getTenant().getId();
+        return user.getTenant() == null ? null : user.getTenant().getId();
     }
 
     // ── Authority builder ───────────────────────────────────────────────

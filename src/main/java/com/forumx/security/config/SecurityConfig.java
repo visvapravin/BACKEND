@@ -77,6 +77,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/forgot-password").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/reset-password").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/google").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/platform/auth/login").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/auth/tenant-admin-invitations/validate").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/auth/tenant-admin-invitations/accept").permitAll()
 
                         // Swagger / OpenAPI Endpoints
                         .requestMatchers(

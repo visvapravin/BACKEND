@@ -46,6 +46,38 @@ public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificat
 
     Optional<User> findByTenantIdAndEmailAndEnabledTrue(Long tenantId, String email);
 
+    @Query("""
+            SELECT DISTINCT u FROM User u
+            LEFT JOIN FETCH u.tenant
+            LEFT JOIN FETCH u.userRoles ur
+            LEFT JOIN FETCH ur.role r
+            LEFT JOIN FETCH r.rolePermissions rp
+            LEFT JOIN FETCH rp.permission
+            WHERE u.tenant.id = :tenantId
+              AND (u.username = :usernameOrEmail OR u.email = :usernameOrEmail)
+              AND u.deleted = false
+              AND u.enabled = true
+            """)
+    Optional<User> findForAuthenticationByTenantIdAndUsernameOrEmail(@Param("tenantId") Long tenantId,
+                                                                     @Param("usernameOrEmail") String usernameOrEmail);
+
+    @Query("""
+            SELECT DISTINCT u FROM User u
+            LEFT JOIN FETCH u.userRoles ur LEFT JOIN FETCH ur.role r
+            LEFT JOIN FETCH r.rolePermissions rp LEFT JOIN FETCH rp.permission
+            WHERE u.tenant IS NULL AND u.deleted = false AND u.enabled = true
+              AND (u.username = :usernameOrEmail OR u.email = :usernameOrEmail)
+              AND ur.active = true AND ur.deleted = false
+              AND r.roleName = com.forumx.auth.enums.RoleType.PLATFORM_ADMIN
+            """)
+    Optional<User> findPlatformUserForAuthentication(@Param("usernameOrEmail") String usernameOrEmail);
+
+    @Query("SELECT COUNT(ur) > 0 FROM UserRole ur JOIN ur.role r " +
+           "WHERE ur.user.tenant IS NULL AND ur.user.deleted = false " +
+           "AND ur.active = true AND ur.deleted = false " +
+           "AND r.roleName = com.forumx.auth.enums.RoleType.PLATFORM_ADMIN")
+    boolean existsPlatformAdmin();
+
     /**
      * Performs a paginated search for active users under a specific tenant.
      * Matches keyword case-insensitively against username.

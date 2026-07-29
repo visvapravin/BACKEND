@@ -434,6 +434,9 @@ public class AuthenticationService {
      * @param tenant the Tenant entity
      */
     private void validateTenant(Tenant tenant) {
+        if (tenant == null) {
+            return;
+        }
         if (!tenant.isActive()) {
             log.warn("Tenant disabled: {}", tenant.getSlug());
             throw new DisabledException("Tenant is inactive");
@@ -503,7 +506,7 @@ public class AuthenticationService {
         if (user.getUsername().startsWith("mod_") || user.getUsername().contains("moderator")) {
             targetRoleType = RoleType.MODERATOR;
         } else if (user.getUsername().startsWith("admin_") || user.getUsername().contains("admin")) {
-            targetRoleType = RoleType.ADMIN;
+            targetRoleType = RoleType.TENANT_ADMIN;
         }
 
         final RoleType finalRoleType = targetRoleType;

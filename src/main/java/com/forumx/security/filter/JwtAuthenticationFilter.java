@@ -140,15 +140,31 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
             String username = claims.getSubject();
             Long tokenTenantId = claims.get(JwtClaimsConstants.TENANT_ID, Long.class);
+            String scope = claims.get(JwtClaimsConstants.SCOPE, String.class);
 
-            Long resolvedTenantId = tenantResolver.resolveTenantId();
-            if (resolvedTenantId == null || !resolvedTenantId.equals(tokenTenantId)) {
+            UserDetails userDetails;
+            if ("PLATFORM".equals(scope)) {
+                if (tokenTenantId != null) {
+                    commenceAuthenticationFailure(request, response, new BadCredentialsException("Invalid platform token"));
+                    return;
+                }
+                userDetails = userDetailsService.loadPlatformUserByUsername(username);
+            } else if ("TENANT".equals(scope)) {
+                Long resolvedTenantId = tenantResolver.resolveTenantId();
+                if (tokenTenantId == null || resolvedTenantId == null || !resolvedTenantId.equals(tokenTenantId)) {
                 log.warn("Tenant mismatch: resolved={}, token={}", resolvedTenantId, tokenTenantId);
                 commenceAuthenticationFailure(request, response, new BadCredentialsException("Tenant mismatch or unresolved"));
                 return;
+                }
+                userDetails = userDetailsService.loadUserByUsername(username);
+                if (((com.forumx.security.model.CustomUserDetails) userDetails).getTenantId() == null) {
+                    commenceAuthenticationFailure(request, response, new BadCredentialsException("Invalid tenant token identity"));
+                    return;
+                }
+            } else {
+                commenceAuthenticationFailure(request, response, new BadCredentialsException("Invalid token scope"));
+                return;
             }
-
-            UserDetails userDetails = userDetailsService.loadUserByUsername(username);
 
             if (jwtTokenProvider.validateToken(token, userDetails)) {
                 Authentication auth = buildAuthentication(userDetails, request);

@@ -21,10 +21,21 @@ public interface TenantRepository extends JpaRepository<Tenant, Long> {
     Optional<Tenant> findBySlug(String slug);
 
     /**
+     * Finds a tenant by its unique slug and ensures it is not soft-deleted.
+     *
+     * @param slug the slug of the tenant
+     * @return an Optional containing the found tenant, or empty if not found or deleted
+     */
+    Optional<Tenant> findBySlugAndDeletedFalse(String slug);
+
+    /**
      * Finds a tenant by its ID and ensures it is not soft-deleted.
      *
      * @param id the tenant ID
      * @return an Optional containing the found tenant, or empty if not found or deleted
      */
     Optional<Tenant> findByIdAndDeletedFalse(Long id);
+
+    boolean existsBySlug(String slug);
+
 }

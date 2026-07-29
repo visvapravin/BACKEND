@@ -362,7 +362,7 @@ public class NotificationService implements NotificationApplicationService {
     public void notifyContentReported(Long tenantId, Long reporterId, String reporterUsername, Long targetId, ReferenceType targetType, Long authorId) {
         java.util.List<User> moderators = userRepository.findUsersByTenantIdAndRoles(
                 tenantId,
-                java.util.List.of(com.forumx.auth.enums.RoleType.MODERATOR, com.forumx.auth.enums.RoleType.ADMIN, com.forumx.auth.enums.RoleType.SUPER_ADMIN)
+                java.util.List.of(com.forumx.auth.enums.RoleType.MODERATOR, com.forumx.auth.enums.RoleType.TENANT_ADMIN, com.forumx.auth.enums.RoleType.PLATFORM_ADMIN)
         );
 
         for (User moderator : moderators) {

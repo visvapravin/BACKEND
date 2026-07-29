@@ -193,7 +193,7 @@ public class ChatServiceImpl implements ChatService {
         ChatSession session = chatSessionService.getSessionByTicketId(ticketId, current.tenantId());
         chatPermissionService.assertCanRead(session, current.userId());
 
-        // Customers always view the complete conversation history
+        // Customers view full ticket conversation history
         boolean isCustomer = session.getCustomer() != null && session.getCustomer().getId().equals(current.userId());
         if (isCustomer) {
             if (beforeMessageId == null) {
@@ -203,40 +203,21 @@ public class ChatServiceImpl implements ChatService {
             }
         }
 
-        // Moderators only see messages created AFTER they joined the support room (joinedAt)
-        Optional<SupportSessionParticipant> participant = participantRepository
-                .findTopBySession_Ticket_IdAndUser_IdOrderByJoinedAtDesc(ticketId, current.userId());
-
-        if (participant.isEmpty()) {
-            // Moderator has not joined this support room yet
-            return Page.empty(pageable);
-        }
-
-        SupportSessionParticipant p = participant.get();
-        Instant joinedAt = p.getJoinedAt();
-
-        if (!p.isActive() && p.getLeftAt() != null) {
-            // Moderator left the room. Only return messages sent while they were active (joinedAt <= createdAt <= leftAt)
-            Instant leftAt = p.getLeftAt();
-            if (beforeMessageId == null) {
-                return chatMessageRepository.findMessagesForParticipantBetweenFirstPage(session.getId(), joinedAt, leftAt, pageable);
-            } else {
-                return chatMessageRepository.findMessagesForParticipantBetween(session.getId(), joinedAt, leftAt, beforeMessageId, pageable);
-            }
-        }
-
+        // Support staff retrieve messages created strictly within their active participation windows
         if (beforeMessageId == null) {
-            return chatMessageRepository.findMessagesForParticipantFirstPage(session.getId(), joinedAt, pageable);
+            return chatMessageRepository.findAuthorizedMessagesFirstPage(session.getId(), current.userId(), pageable);
         } else {
-            return chatMessageRepository.findMessagesForParticipantBefore(session.getId(), joinedAt, beforeMessageId, pageable);
+            return chatMessageRepository.findAuthorizedMessagesBefore(session.getId(), current.userId(), beforeMessageId, pageable);
         }
     }
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional
     public ChatSession getSession(Long ticketId) {
         CurrentUser current = resolveCurrentUser();
-        ChatSession session = chatSessionService.getSessionByTicketId(ticketId, current.tenantId());
+        Ticket ticket = ticketRepository.findByIdAndTenant_IdAndDeletedFalse(ticketId, current.tenantId())
+                .orElseThrow(() -> new EntityNotFoundException("Ticket not found with ID: " + ticketId));
+        ChatSession session = chatSessionService.getOrCreateSession(ticket, current.tenantId());
         chatPermissionService.assertCanRead(session, current.userId());
         return session;
     }

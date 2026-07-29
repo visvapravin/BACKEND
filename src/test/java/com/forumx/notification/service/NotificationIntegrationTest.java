@@ -168,8 +168,8 @@ public class NotificationIntegrationTest {
                 .orElseGet(() -> roleRepository.save(Role.builder().roleName(RoleType.USER).active(true).build()));
         Role moderatorRole = roleRepository.findByRoleName(RoleType.MODERATOR)
                 .orElseGet(() -> roleRepository.save(Role.builder().roleName(RoleType.MODERATOR).active(true).build()));
-        Role adminRole = roleRepository.findByRoleName(RoleType.ADMIN)
-                .orElseGet(() -> roleRepository.save(Role.builder().roleName(RoleType.ADMIN).active(true).build()));
+        Role adminRole = roleRepository.findByRoleName(RoleType.TENANT_ADMIN)
+                .orElseGet(() -> roleRepository.save(Role.builder().roleName(RoleType.TENANT_ADMIN).active(true).build()));
 
         // 3. Setup Tenant 1 Users
         tenant1User = userRepository.save(User.builder()

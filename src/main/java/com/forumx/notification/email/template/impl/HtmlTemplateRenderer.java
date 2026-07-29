@@ -122,6 +122,23 @@ public class HtmlTemplateRenderer implements EmailTemplateRenderer {
                         """.formatted(name, chatTicketId, preview, senderName);
                 return buildCommonLayout("New Support Chat Message - ForumX", body);
 
+            case MODERATOR_INVITATION:
+                String invitationUrl = model.getOrDefault("invitationUrl", "#");
+                String tenantName = model.getOrDefault("tenantName", "ForumX Workspace");
+                String roleName = model.getOrDefault("role", "MODERATOR");
+                body = """
+                        <p>Hello,</p>
+                        <p>You have been invited to join <strong>%s</strong> as a <strong>%s</strong>!</p>
+                        <p>Click the button below to accept your invitation and setup your staff account:</p>
+                        <div class="btn-container">
+                            <a href="%s" class="btn">Accept Invitation</a>
+                        </div>
+                        <p>If the button doesn't work, copy and paste this link into your browser:</p>
+                        <p><a href="%s" class="link-raw">%s</a></p>
+                        <p>This invitation link will expire in 7 days.</p>
+                        """.formatted(tenantName, roleName, invitationUrl, invitationUrl, invitationUrl);
+                return buildCommonLayout("Moderator Invitation - ForumX", body);
+
             case GENERIC:
             default:
                 String genericSubject = model.getOrDefault("subject", "Notification");
@@ -142,6 +159,7 @@ public class HtmlTemplateRenderer implements EmailTemplateRenderer {
             case TICKET_ASSIGNED -> "New Support Ticket Assigned #" + model.getOrDefault("ticketId", "");
             case TICKET_CLOSED -> "Support Ticket Resolved #" + model.getOrDefault("ticketId", "");
             case CHAT_MESSAGE -> "New message on Ticket #" + model.getOrDefault("ticketId", "");
+            case MODERATOR_INVITATION -> "Moderator Invitation - " + model.getOrDefault("tenantName", "ForumX");
             case GENERIC -> model.containsKey("subject") ? model.get("subject") + " - ForumX" : "Notification - ForumX";
         };
     }

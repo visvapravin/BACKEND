@@ -65,6 +65,10 @@ public class ChatPermissionServiceTest {
         // CLOSED session should reject sending messages
         session.setStatus(ChatSessionStatus.CLOSED);
         assertThrows(IllegalStateException.class, () -> permissionService.assertCanSend(session, customer.getId()));
+
+        // RESOLVED session should also reject sending messages
+        session.setStatus(ChatSessionStatus.RESOLVED);
+        assertThrows(IllegalStateException.class, () -> permissionService.assertCanSend(session, customer.getId()));
         
         // Reset to ACTIVE and verify outsider is denied
         session.setStatus(ChatSessionStatus.ACTIVE);

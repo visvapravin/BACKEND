@@ -15,6 +15,23 @@ import org.springframework.stereotype.Repository;
 public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> {
 
     @EntityGraph(attributePaths = {"sender", "session"})
+    @Query("SELECT m FROM ChatMessage m WHERE m.session.id = :sessionId AND m.deleted = false AND EXISTS (SELECT p FROM SupportSessionParticipant p WHERE p.session.id = m.session.id AND p.user.id = :userId AND m.createdAt >= p.joinedAt AND (p.leftAt IS NULL OR m.createdAt <= p.leftAt)) ORDER BY m.createdAt ASC")
+    Page<ChatMessage> findAuthorizedMessagesFirstPage(
+            @Param("sessionId") Long sessionId,
+            @Param("userId") Long userId,
+            Pageable pageable
+    );
+
+    @EntityGraph(attributePaths = {"sender", "session"})
+    @Query("SELECT m FROM ChatMessage m WHERE m.session.id = :sessionId AND m.deleted = false AND m.id < :beforeMessageId AND EXISTS (SELECT p FROM SupportSessionParticipant p WHERE p.session.id = m.session.id AND p.user.id = :userId AND m.createdAt >= p.joinedAt AND (p.leftAt IS NULL OR m.createdAt <= p.leftAt)) ORDER BY m.createdAt ASC")
+    Page<ChatMessage> findAuthorizedMessagesBefore(
+            @Param("sessionId") Long sessionId,
+            @Param("userId") Long userId,
+            @Param("beforeMessageId") Long beforeMessageId,
+            Pageable pageable
+    );
+
+    @EntityGraph(attributePaths = {"sender", "session"})
     @Query("SELECT m FROM ChatMessage m WHERE m.session.id = :sessionId AND m.deleted = false AND m.id < :beforeMessageId")
     Page<ChatMessage> findMessagesBefore(
             @Param("sessionId") Long sessionId,

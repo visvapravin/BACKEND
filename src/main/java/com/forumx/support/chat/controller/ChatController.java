@@ -22,6 +22,7 @@ import jakarta.persistence.EntityNotFoundException;
 import jakarta.validation.Valid;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -32,6 +33,7 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
+@Slf4j
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/chat")
@@ -94,16 +96,25 @@ public class ChatController {
     @GetMapping("/{ticketId}/session")
     @Operation(summary = "Get support chat session details")
     public ResponseEntity<ChatSessionResponse> getSession(@PathVariable Long ticketId) {
-        ChatSession session = chatService.getSession(ticketId);
-        return ResponseEntity.ok(chatMessageMapper.toResponse(session));
+        try {
+            ChatSession session = chatService.getSession(ticketId);
+            return ResponseEntity.ok(chatMessageMapper.toResponse(session));
+        } catch (EntityNotFoundException e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage(), e);
+        } catch (AccessDeniedException e) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, e.getMessage(), e);
+        }
     }
 
     @PostMapping("/{ticketId}/join")
     @Operation(summary = "Join support room as moderator")
     public ResponseEntity<ParticipantResponse> joinRoom(@PathVariable Long ticketId) {
         User user = resolveCurrentUser();
+        log.info("[DIAGNOSTIC] POST /api/v1/chat/{}/join - User: {}, UserId: {}", ticketId, user.getUsername(), user.getId());
         try {
-            SupportSessionParticipant participant = chatSessionService.joinRoom(ticketId, user, ParticipantRole.MODERATOR);
+            SupportSessionParticipant participant = chatSessionService.joinRoom(ticketId, user, ParticipantRole.MODERATOR, true);
+            log.info("[DIAGNOSTIC] POST /api/v1/chat/{}/join SUCCESS - ParticipantId: {}, IsActive: {}",
+                    ticketId, participant.getId(), participant.isActive());
             return ResponseEntity.ok(ParticipantResponse.builder()
                     .id(participant.getId())
                     .ticketId(ticketId)
@@ -116,7 +127,14 @@ public class ChatController {
                     .isActive(participant.isActive())
                     .isOnline(true)
                     .build());
+        } catch (EntityNotFoundException e) {
+            log.error("[DIAGNOSTIC] POST /api/v1/chat/{}/join EntityNotFound: {}", ticketId, e.getMessage());
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage(), e);
+        } catch (AccessDeniedException e) {
+            log.error("[DIAGNOSTIC] POST /api/v1/chat/{}/join AccessDenied: {}", ticketId, e.getMessage());
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, e.getMessage(), e);
         } catch (IllegalStateException e) {
+            log.error("[DIAGNOSTIC] POST /api/v1/chat/{}/join IllegalState: {}", ticketId, e.getMessage());
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
         }
     }
@@ -144,7 +162,10 @@ public class ChatController {
     @Operation(summary = "Get active support room participants")
     public ResponseEntity<List<ParticipantResponse>> getParticipants(@PathVariable Long ticketId) {
         Long tenantId = tenantResolver.resolveTenantId();
-        return ResponseEntity.ok(chatSessionService.getParticipants(ticketId, tenantId));
+        List<ParticipantResponse> result = chatSessionService.getParticipants(ticketId, tenantId);
+        log.info("[DIAGNOSTIC] GET /api/v1/chat/{}/participants - TenantId: {}, Returned count: {}",
+                ticketId, tenantId, result.size());
+        return ResponseEntity.ok(result);
     }
 
     private User resolveCurrentUser() {

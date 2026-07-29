@@ -33,10 +33,10 @@ public class ChatMessageMapper {
         }
         return ChatSessionResponse.builder()
                 .id(session.getId())
-                .ticketId(session.getTicket().getId())
-                .customerId(session.getCustomer().getId())
-                .moderatorId(session.getModerator().getId())
-                .status(session.getStatus().name())
+                .ticketId(session.getTicket() != null ? session.getTicket().getId() : null)
+                .customerId(session.getCustomer() != null ? session.getCustomer().getId() : null)
+                .moderatorId(session.getModerator() != null ? session.getModerator().getId() : null)
+                .status(session.getStatus() != null ? session.getStatus().name() : null)
                 .createdAt(session.getCreatedAt())
                 .updatedAt(session.getUpdatedAt())
                 .build();

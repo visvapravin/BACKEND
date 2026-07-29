@@ -4,6 +4,11 @@ public record TypingStartedEvent(
         Long sessionId,
         Long tenantId,
         Long userId,
-        String username
+        String username,
+        String displayName
 ) {
+    public TypingStartedEvent(Long sessionId, Long tenantId, Long userId, String username) {
+        this(sessionId, tenantId, userId, username, username);
+    }
 }
+
