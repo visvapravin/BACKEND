@@ -25,6 +25,8 @@ public class DefaultModerationActionExecutor implements ModerationActionExecutor
     private final AnswerRepository answerRepository;
     private final CommentRepository commentRepository;
     private final UserRepository userRepository;
+    private final com.forumx.presence.service.PresenceService presenceService;
+
 
     @Override
     public void execute(Long tenantId, ModerationAction action, ModerationTarget target, String notes) {
@@ -33,7 +35,7 @@ public class DefaultModerationActionExecutor implements ModerationActionExecutor
 
         switch (action) {
             case HIDE_CONTENT, DELETE_CONTENT -> handleHideOrDelete(target);
-            case SUSPEND_USER, BAN_USER -> handleSuspendOrBan(target);
+            case SUSPEND_USER, BAN_USER -> handleSuspendOrBan(target, tenantId);
             case WARN_USER -> log.warn("WARN_USER applied to owner of targetType={} targetId={}. Notes: {}", 
                     target.getTargetType(), target.getTargetId(), notes);
             case DISMISS -> log.info("DISMISS action applied; no content alteration required.");
@@ -70,7 +72,8 @@ public class DefaultModerationActionExecutor implements ModerationActionExecutor
         }
     }
 
-    private void handleSuspendOrBan(ModerationTarget target) {
+    private void handleSuspendOrBan(ModerationTarget target, Long tenantId) {
+
         Long userId = null;
         switch (target.getTargetType()) {
             case QUESTION -> {
@@ -98,8 +101,13 @@ public class DefaultModerationActionExecutor implements ModerationActionExecutor
             if (user != null) {
                 user.setEnabled(false);
                 userRepository.save(user);
+                Long uTenantId = user.getTenant() != null ? user.getTenant().getId() : tenantId;
+                if (presenceService != null) {
+                    presenceService.evictPresence(user.getId(), uTenantId);
+                }
                 log.info("Suspended/Banned User id={} username={}", user.getId(), user.getUsername());
             }
+
         }
     }
 }

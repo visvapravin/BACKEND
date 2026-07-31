@@ -239,6 +239,27 @@ public class PresenceServiceImpl implements PresenceService {
         return (int) redisGateway.sCard(RedisKeys.presenceTenantOnline(tenantId));
     }
 
+    @Override
+    public void evictPresence(Long userId, Long tenantId) {
+        if (!properties.isEnabled() || userId == null) {
+            return;
+        }
+        String sessionsKey = RedisKeys.presenceSessions(userId);
+        java.util.Set<String> sessions = redisGateway.sMembers(sessionsKey);
+        if (sessions != null && !sessions.isEmpty()) {
+            for (String sessionId : sessions) {
+                redisGateway.delete(RedisKeys.presenceSession(sessionId));
+            }
+        }
+        redisGateway.delete(sessionsKey);
+        redisGateway.delete(RedisKeys.presence(userId));
+        if (tenantId != null) {
+            redisGateway.sRem(RedisKeys.presenceTenantOnline(tenantId), String.valueOf(userId));
+        }
+        log.info("Evicted presence for user. userId={}, tenantId={}", userId, tenantId);
+    }
+
+
     private void broadcastPresenceChange(UserPresence presence) {
         if (redisPublisher == null) {
             log.debug("RedisPublisher not available. Skipping presence change broadcast.");

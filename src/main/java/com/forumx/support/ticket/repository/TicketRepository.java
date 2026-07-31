@@ -28,4 +28,7 @@ public interface TicketRepository extends JpaRepository<Ticket, Long> {
     long countByTenant_IdAndStatusInAndDeletedFalse(Long tenantId, java.util.Collection<TicketStatus> statuses);
 
     long countByTenant_IdAndResolvedAtGreaterThanEqualAndDeletedFalse(Long tenantId, java.time.LocalDateTime dateTime);
+
+    long countByTenant_IdAndResolvedAtGreaterThanEqualAndResolvedAtLessThanAndDeletedFalse(Long tenantId, java.time.LocalDateTime startDateTime, java.time.LocalDateTime endDateTime);
 }
+

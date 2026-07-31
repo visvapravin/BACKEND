@@ -135,4 +135,18 @@ public class PresenceServiceTest {
         assertEquals(PresenceStatus.OFFLINE, res.get(2L).getStatus());
         assertEquals(0, res.get(2L).getActiveSessions());
     }
+
+    @Test
+    public void testEvictPresencePurgesUserSessionAndTenantKeys() {
+        when(redisGateway.sMembers(eq("forumx:presence:sessions:1"))).thenReturn(java.util.Set.of("sess-1", "sess-2"));
+
+        presenceService.evictPresence(1L, 10L);
+
+        verify(redisGateway).delete(eq("forumx:presence:session:sess-1"));
+        verify(redisGateway).delete(eq("forumx:presence:session:sess-2"));
+        verify(redisGateway).delete(eq("forumx:presence:sessions:1"));
+        verify(redisGateway).delete(eq("forumx:presence:user:1"));
+        verify(redisGateway).sRem(eq("forumx:presence:tenant:10:online"), eq("1"));
+    }
 }
+

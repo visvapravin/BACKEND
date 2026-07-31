@@ -278,7 +278,8 @@ public class PrivateSupportBackendImprovementsTest {
         when(ticketRepository.countByTenant_IdAndStatusAndDeletedFalse(1L, TicketStatus.OPEN)).thenReturn(4L);
         when(ticketRepository.countByTenant_IdAndStatusAndDeletedFalse(1L, TicketStatus.IN_PROGRESS)).thenReturn(7L);
         when(ticketRepository.countByTenant_IdAndStatusInAndDeletedFalse(eq(1L), anyCollection())).thenReturn(25L);
-        when(ticketRepository.countByTenant_IdAndResolvedAtGreaterThanEqualAndDeletedFalse(eq(1L), any())).thenReturn(6L);
+        when(ticketRepository.countByTenant_IdAndResolvedAtGreaterThanEqualAndResolvedAtLessThanAndDeletedFalse(eq(1L), any(), any())).thenReturn(6L);
+
 
         com.forumx.support.ticket.dto.response.SupportDashboardSummary summary = ticketService.getDashboardSummary();
 

@@ -14,4 +14,6 @@ public interface PresenceService {
     int getActiveSessions(Long userId);
     java.util.List<UserPresence> getTenantOnlineUsers(Long tenantId);
     int getTenantOnlineCount(Long tenantId);
+    void evictPresence(Long userId, Long tenantId);
 }
+

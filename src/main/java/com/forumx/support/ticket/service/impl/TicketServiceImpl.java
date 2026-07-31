@@ -142,8 +142,24 @@ public class TicketServiceImpl implements TicketService {
         long closed = ticketRepository.countByTenant_IdAndStatusInAndDeletedFalse(
                 tenantId, java.util.List.of(TicketStatus.RESOLVED, TicketStatus.CLOSED));
 
-        LocalDateTime startOfDay = java.time.LocalDate.now(java.time.ZoneOffset.UTC).atStartOfDay();
-        long resolvedToday = ticketRepository.countByTenant_IdAndResolvedAtGreaterThanEqualAndDeletedFalse(tenantId, startOfDay);
+        java.time.ZoneId zoneId;
+        try {
+            String tz = current.user().getTenant() != null ? current.user().getTenant().getTimezone() : null;
+            zoneId = (tz != null && !tz.isBlank()) ? java.time.ZoneId.of(tz) : java.time.ZoneOffset.UTC;
+        } catch (Exception e) {
+            zoneId = java.time.ZoneOffset.UTC;
+        }
+
+        java.time.ZonedDateTime nowInTenantZone = java.time.ZonedDateTime.now(zoneId);
+        java.time.ZonedDateTime startOfTenantDay = nowInTenantZone.toLocalDate().atStartOfDay(zoneId);
+        java.time.ZonedDateTime startOfNextTenantDay = startOfTenantDay.plusDays(1);
+
+        LocalDateTime startDateTime = LocalDateTime.ofInstant(startOfTenantDay.toInstant(), java.time.ZoneOffset.UTC);
+        LocalDateTime endDateTime = LocalDateTime.ofInstant(startOfNextTenantDay.toInstant(), java.time.ZoneOffset.UTC);
+
+        long resolvedToday = ticketRepository.countByTenant_IdAndResolvedAtGreaterThanEqualAndResolvedAtLessThanAndDeletedFalse(
+                tenantId, startDateTime, endDateTime);
+
 
         java.util.List<com.forumx.presence.dto.UserPresence> onlineList = presenceService.getTenantOnlineUsers(tenantId);
         java.util.List<RoleType> modRoles = java.util.List.of(RoleType.MODERATOR, RoleType.TENANT_ADMIN, RoleType.PLATFORM_ADMIN);
