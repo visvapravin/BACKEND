@@ -12,7 +12,9 @@ import com.forumx.question.entity.Question;
 import com.forumx.question.entity.QuestionStatus;
 import com.forumx.question.mapper.QuestionMapper;
 import com.forumx.question.repository.QuestionRepository;
+import com.forumx.question.repository.QuestionViewRepository;
 import com.forumx.security.facade.AuthenticationFacade;
+
 import com.forumx.security.model.CustomUserDetails;
 import com.forumx.tenant.entity.Tenant;
 import com.forumx.tenant.repository.TenantRepository;
@@ -35,6 +37,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class QuestionServiceImpl implements QuestionService {
 
     private final QuestionRepository questionRepository;
+    private final QuestionViewRepository questionViewRepository;
     private final UserRepository userRepository;
     private final TenantRepository tenantRepository;
     private final QuestionMapper questionMapper;
@@ -118,8 +121,21 @@ public class QuestionServiceImpl implements QuestionService {
             throw new EntityNotFoundException("Question is archived and not accessible");
         }
 
-        // 6. Increment View Counter (only after successful loading and validation)
-        question.setViewCount(question.getViewCount() + 1);
+        // 6. Unique View Increment (only when newly inserted)
+        java.time.Instant now = java.time.Instant.now();
+        int inserted = questionViewRepository.insertIfNotExists(
+                resolvedTenantId,
+                questionId,
+                currentUserDetails.getUserId(),
+                now,
+                now,
+                currentUserDetails.getUsername()
+        );
+
+        if (inserted > 0) {
+            questionRepository.incrementViewCount(questionId);
+            question.setViewCount(question.getViewCount() + 1);
+        }
 
         // 7. Logging
         log.info("Question retrieved. tenantId={}, userId={}, questionId={}",

@@ -8,6 +8,7 @@ import com.forumx.support.chat.dto.request.SendMessageRequest;
 import com.forumx.support.chat.dto.response.ChatMessageResponse;
 import com.forumx.support.chat.dto.response.ChatSessionResponse;
 import com.forumx.support.chat.dto.response.ParticipantResponse;
+import com.forumx.support.chat.dto.response.ChatMessageHistoryResponse;
 import com.forumx.support.chat.entity.ChatMessage;
 import com.forumx.support.chat.entity.ChatSession;
 import com.forumx.support.chat.entity.ParticipantRole;
@@ -84,13 +85,18 @@ public class ChatController {
 
     @GetMapping("/{ticketId}/messages")
     @Operation(summary = "Get paginated chat messages for ticket")
-    public ResponseEntity<Page<ChatMessageResponse>> getMessages(
+    public ResponseEntity<ChatMessageHistoryResponse> getMessages(
             @PathVariable Long ticketId,
             @RequestParam(required = false) Long beforeMessageId,
-            @PageableDefault(size = 50, sort = "createdAt", direction = Sort.Direction.ASC) Pageable pageable
+            @RequestParam(defaultValue = "50") int size
     ) {
-        Page<ChatMessage> messages = chatService.getMessages(ticketId, beforeMessageId, pageable);
-        return ResponseEntity.ok(messages.map(chatMessageMapper::toResponse));
+        int limit = Math.min(Math.max(size, 1), 100);
+        List<ChatMessage> fetched = chatService.getLatestMessages(ticketId, beforeMessageId, limit + 1);
+        boolean hasMore = fetched.size() > limit;
+        List<ChatMessage> slice = hasMore ? fetched.subList(0, limit) : fetched;
+        java.util.Collections.reverse(slice);
+        Long nextBeforeMessageId = hasMore && !slice.isEmpty() ? slice.get(0).getId() : null;
+        return ResponseEntity.ok(new ChatMessageHistoryResponse(slice.stream().map(chatMessageMapper::toResponse).toList(), hasMore, nextBeforeMessageId));
     }
 
     @GetMapping("/{ticketId}/session")

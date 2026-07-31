@@ -2,22 +2,25 @@ package com.forumx.vote.mapper;
 
 import com.forumx.vote.dto.response.VoteResponse;
 import com.forumx.vote.entity.Vote;
-import org.mapstruct.AfterMapping;
-import org.mapstruct.Mapper;
-import org.mapstruct.Mapping;
-import org.mapstruct.MappingTarget;
+import org.springframework.stereotype.Component;
 
-@Mapper(componentModel = "spring")
-public interface VoteMapper {
-    @Mapping(target = "targetId", ignore = true)
-    @Mapping(target = "targetType", ignore = true)
-    @Mapping(target = "score", ignore = true)
-    VoteResponse toResponse(Vote vote);
-
-    @AfterMapping
-    default void setTarget(Vote vote, @MappingTarget VoteResponse response) {
-        if (vote.getQuestion() != null) { response.setTargetId(vote.getQuestion().getId()); response.setTargetType("QUESTION"); }
-        else if (vote.getAnswer() != null) { response.setTargetId(vote.getAnswer().getId()); response.setTargetType("ANSWER"); }
-        else if (vote.getComment() != null) { response.setTargetId(vote.getComment().getId()); response.setTargetType("COMMENT"); }
+@Component
+public class VoteMapper {
+    public VoteResponse toResponse(Vote vote) {
+        if (vote == null) return null;
+        Long targetId = null;
+        String targetType = null;
+        if (vote.getQuestion() != null) {
+            targetId = vote.getQuestion().getId();
+            targetType = "QUESTION";
+        } else if (vote.getAnswer() != null) {
+            targetId = vote.getAnswer().getId();
+            targetType = "ANSWER";
+        } else if (vote.getComment() != null) {
+            targetId = vote.getComment().getId();
+            targetType = "COMMENT";
+        }
+        return new VoteResponse(targetId, targetType, vote.isDeleted() ? null : vote.getVoteType(), 0L);
     }
 }
+

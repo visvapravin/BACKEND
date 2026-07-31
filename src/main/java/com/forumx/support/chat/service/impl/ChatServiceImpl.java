@@ -212,6 +212,31 @@ public class ChatServiceImpl implements ChatService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public List<ChatMessage> getLatestMessages(Long ticketId, Long beforeMessageId, int size) {
+        CurrentUser current = resolveCurrentUser();
+        ChatSession session = chatSessionService.getSessionByTicketId(ticketId, current.tenantId());
+        chatPermissionService.assertCanRead(session, current.userId());
+        int boundedSize = Math.min(Math.max(size, 1), 101);
+        Pageable limit = org.springframework.data.domain.PageRequest.of(0, boundedSize);
+        ChatMessage cursor = null;
+        if (beforeMessageId != null) {
+            cursor = chatMessageRepository.findById(beforeMessageId)
+                    .orElseThrow(() -> new EntityNotFoundException("Cursor message not found"));
+            if (!cursor.getSession().getId().equals(session.getId())) {
+                throw new AccessDeniedException("Cursor message does not belong to this chat session");
+            }
+        }
+        boolean isCustomer = session.getCustomer() != null && session.getCustomer().getId().equals(current.userId());
+        if (isCustomer) {
+            return cursor == null ? chatMessageRepository.findLatestMessages(session.getId(), limit)
+                    : chatMessageRepository.findLatestMessagesBefore(session.getId(), cursor.getCreatedAt(), cursor.getId(), limit);
+        }
+        return cursor == null ? chatMessageRepository.findAuthorizedLatestMessages(session.getId(), current.userId(), limit)
+                : chatMessageRepository.findAuthorizedLatestMessagesBefore(session.getId(), current.userId(), cursor.getCreatedAt(), cursor.getId(), limit);
+    }
+
+    @Override
     @Transactional
     public ChatSession getSession(Long ticketId) {
         CurrentUser current = resolveCurrentUser();

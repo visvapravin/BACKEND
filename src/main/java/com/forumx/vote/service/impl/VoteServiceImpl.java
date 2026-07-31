@@ -59,9 +59,9 @@ public class VoteServiceImpl implements VoteService {
         rejectSelf(target.getAuthor(), current); Vote vote = apply(voteRepository.findByCommentAndVoter(target, current.user()), request.voteType(), current.user(), v -> v.setComment(target));
         long score = commentScore(target); notifyComment(target, current, vote); return response(vote, score);
     }
-    @Override @Transactional(readOnly = true) public ScoreResponse getQuestionScore(Long id) { CurrentUser c=current(); Question q=question(id,c.tenantId()); return new ScoreResponse(id,"QUESTION",questionScore(q)); }
-    @Override @Transactional(readOnly = true) public ScoreResponse getAnswerScore(Long id) { CurrentUser c=current(); Answer a=answer(id,c.tenantId()); return new ScoreResponse(id,"ANSWER",answerScore(a)); }
-    @Override @Transactional(readOnly = true) public ScoreResponse getCommentScore(Long id) { CurrentUser c=current(); Comment m=comment(id,c.tenantId()); return new ScoreResponse(id,"COMMENT",commentScore(m)); }
+    @Override @Transactional(readOnly = true) public ScoreResponse getQuestionScore(Long id) { CurrentUser c=current(); Question q=question(id,c.tenantId()); VoteType userVote = voteRepository.findByQuestionAndVoterAndDeletedFalse(q, c.user()).map(Vote::getVoteType).orElse(null); return new ScoreResponse(id,"QUESTION",questionScore(q),userVote); }
+    @Override @Transactional(readOnly = true) public ScoreResponse getAnswerScore(Long id) { CurrentUser c=current(); Answer a=answer(id,c.tenantId()); VoteType userVote = voteRepository.findByAnswerAndVoterAndDeletedFalse(a, c.user()).map(Vote::getVoteType).orElse(null); return new ScoreResponse(id,"ANSWER",answerScore(a),userVote); }
+    @Override @Transactional(readOnly = true) public ScoreResponse getCommentScore(Long id) { CurrentUser c=current(); Comment m=comment(id,c.tenantId()); VoteType userVote = voteRepository.findByCommentAndVoterAndDeletedFalse(m, c.user()).map(Vote::getVoteType).orElse(null); return new ScoreResponse(id,"COMMENT",commentScore(m),userVote); }
 
     private Vote apply(Optional<Vote> existing, VoteType requested, User voter, java.util.function.Consumer<Vote> target) {
         Vote vote = existing.orElseGet(() -> { Vote created=Vote.builder().voter(voter).voteType(requested).build(); target.accept(created); return created; });

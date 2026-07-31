@@ -47,6 +47,22 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> 
     );
 
     @EntityGraph(attributePaths = {"sender", "session"})
+    @Query("SELECT m FROM ChatMessage m WHERE m.session.id = :sessionId AND m.deleted = false ORDER BY m.createdAt DESC, m.id DESC")
+    List<ChatMessage> findLatestMessages(@Param("sessionId") Long sessionId, Pageable pageable);
+
+    @EntityGraph(attributePaths = {"sender", "session"})
+    @Query("SELECT m FROM ChatMessage m WHERE m.session.id = :sessionId AND m.deleted = false AND (m.createdAt < :cursorCreatedAt OR (m.createdAt = :cursorCreatedAt AND m.id < :cursorId)) ORDER BY m.createdAt DESC, m.id DESC")
+    List<ChatMessage> findLatestMessagesBefore(@Param("sessionId") Long sessionId, @Param("cursorCreatedAt") java.time.Instant cursorCreatedAt, @Param("cursorId") Long cursorId, Pageable pageable);
+
+    @EntityGraph(attributePaths = {"sender", "session"})
+    @Query("SELECT m FROM ChatMessage m WHERE m.session.id = :sessionId AND m.deleted = false AND EXISTS (SELECT p FROM SupportSessionParticipant p WHERE p.session.id = m.session.id AND p.user.id = :userId AND m.createdAt >= p.joinedAt AND (p.leftAt IS NULL OR m.createdAt <= p.leftAt)) ORDER BY m.createdAt DESC, m.id DESC")
+    List<ChatMessage> findAuthorizedLatestMessages(@Param("sessionId") Long sessionId, @Param("userId") Long userId, Pageable pageable);
+
+    @EntityGraph(attributePaths = {"sender", "session"})
+    @Query("SELECT m FROM ChatMessage m WHERE m.session.id = :sessionId AND m.deleted = false AND (m.createdAt < :cursorCreatedAt OR (m.createdAt = :cursorCreatedAt AND m.id < :cursorId)) AND EXISTS (SELECT p FROM SupportSessionParticipant p WHERE p.session.id = m.session.id AND p.user.id = :userId AND m.createdAt >= p.joinedAt AND (p.leftAt IS NULL OR m.createdAt <= p.leftAt)) ORDER BY m.createdAt DESC, m.id DESC")
+    List<ChatMessage> findAuthorizedLatestMessagesBefore(@Param("sessionId") Long sessionId, @Param("userId") Long userId, @Param("cursorCreatedAt") java.time.Instant cursorCreatedAt, @Param("cursorId") Long cursorId, Pageable pageable);
+
+    @EntityGraph(attributePaths = {"sender", "session"})
     @Query("SELECT m FROM ChatMessage m WHERE m.session.id = :sessionId AND m.deleted = false AND m.createdAt >= :joinedAt")
     Page<ChatMessage> findMessagesForParticipantFirstPage(
             @Param("sessionId") Long sessionId,

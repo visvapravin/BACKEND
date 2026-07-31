@@ -11,7 +11,9 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
@@ -131,6 +133,10 @@ public interface QuestionRepository extends JpaRepository<Question, Long>, JpaSp
      */
     List<Question> findAllByIdInAndTenantIdAndDeletedFalse(Collection<Long> ids, Long tenantId);
 
+    @Modifying
+    @Query("UPDATE Question q SET q.viewCount = q.viewCount + 1 WHERE q.id = :questionId")
+    int incrementViewCount(@Param("questionId") Long questionId);
+
     @Query("""
         SELECT new com.forumx.question.dto.response.SearchResultResponse(
             q.id,
@@ -157,4 +163,5 @@ public interface QuestionRepository extends JpaRepository<Question, Long>, JpaSp
             @Param("keyword") String keyword,
             Pageable pageable
     );
+
 }
