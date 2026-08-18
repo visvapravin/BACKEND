@@ -170,10 +170,10 @@ app:
 forumx:
   bootstrap:
     platform-admin:
-      enabled: ${FORUMX_BOOTSTRAP_PLATFORM_ADMIN:false}
-      email: ${FORUMX_BOOTSTRAP_PLATFORM_ADMIN_EMAIL:}
-      username: ${FORUMX_BOOTSTRAP_PLATFORM_ADMIN_USERNAME:}
-      password: ${FORUMX_BOOTSTRAP_PLATFORM_ADMIN_PASSWORD:}
+      enabled: ${FORUMX_BOOTSTRAP_PLATFORM_ADMIN:true}
+      email: ${FORUMX_BOOTSTRAP_PLATFORM_ADMIN_EMAIL:platform-admin@forumx.local}
+      username: ${FORUMX_BOOTSTRAP_PLATFORM_ADMIN_USERNAME:platform_admin}
+      password: ${FORUMX_BOOTSTRAP_PLATFORM_ADMIN_PASSWORD:AdminPassword123!}
   # Redis – Upstash (Lettuce + TLS + connection pooling)
   # RedisConfig reads ONLY from forumx.redis.* via RedisProperties.
   # spring.data.redis.* is NOT used (we build LettuceConnectionFactory manually).
