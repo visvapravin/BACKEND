@@ -50,8 +50,30 @@ public class OpenApiConfiguration {
     }
 
     @Bean
+    public GroupedOpenApi allApi() {
+        return GroupedOpenApi.builder()
+                .group("00-all-apis")
+                .pathsToMatch("/api/v1/**")
+                .addOpenApiCustomizer(globalResponsesCustomiser())
+                .build();
+    }
+
+    @Bean
+    public GroupedOpenApi platformApi() {
+        return GroupedOpenApi.builder()
+                .group("platform")
+                .pathsToMatch("/api/v1/platform/**")
+                .addOpenApiCustomizer(globalResponsesCustomiser())
+                .build();
+    }
+
+    @Bean
     public GroupedOpenApi authApi() {
-        return groupedApi("auth", "com.forumx.auth.controller");
+        return GroupedOpenApi.builder()
+                .group("auth")
+                .pathsToMatch("/api/v1/auth/**", "/api/v1/invitations/**")
+                .addOpenApiCustomizer(globalResponsesCustomiser())
+                .build();
     }
 
     @Bean
@@ -96,7 +118,7 @@ public class OpenApiConfiguration {
 
     @Bean
     public GroupedOpenApi supportApi() {
-        return groupedApi("support", "com.forumx.support.ticket.controller");
+        return groupedApi("support", "com.forumx.support.ticket.controller", "com.forumx.support.chat.controller");
     }
 
     @Bean
@@ -120,7 +142,11 @@ public class OpenApiConfiguration {
 
     @Bean
     public GroupedOpenApi adminApi() {
-        return groupedApi("admin", "com.forumx.modules.admin.controller");
+        return GroupedOpenApi.builder()
+                .group("admin")
+                .pathsToMatch("/api/v1/admin/**")
+                .addOpenApiCustomizer(globalResponsesCustomiser())
+                .build();
     }
 
     private GroupedOpenApi groupedApi(String groupName, String... packagesToScan) {
