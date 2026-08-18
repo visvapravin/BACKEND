@@ -22,8 +22,6 @@ import com.forumx.auth.repository.RoleRepository;
 import com.forumx.auth.repository.UserRepository;
 import com.forumx.auth.repository.UserRoleRepository;
 import com.forumx.auth.service.AuthenticationService;
-import com.forumx.common.exception.ExpiredTokenException;
-import com.forumx.common.exception.InvalidTokenException;
 import com.forumx.common.exception.InvitationAlreadyAcceptedException;
 import com.forumx.common.exception.InvitationAlreadyPendingException;
 import com.forumx.common.exception.InvitationNotFoundException;
@@ -36,7 +34,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.mock.web.MockHttpServletRequest;
-import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -88,7 +85,6 @@ public class ModeratorInvitationIntegrationTest {
     private EntityManager entityManager;
 
     private Tenant tenantA;
-    private Tenant tenantB;
     private User tenantAdminA;
     private User regularUserA;
     private User moderatorA;
@@ -106,7 +102,7 @@ public class ModeratorInvitationIntegrationTest {
                         .maxUsers(100).storageQuotaMB(1024L).timezone("UTC").locale("en_US")
                         .build()));
 
-        tenantB = tenantRepository.findBySlugAndDeletedFalse("test-tenant-b")
+        tenantRepository.findBySlugAndDeletedFalse("test-tenant-b")
                 .orElseGet(() -> tenantRepository.save(Tenant.builder().name("Tenant B").slug("test-tenant-b")
                         .status(Tenant.TenantStatus.ACTIVE)
                         .subscriptionPlan(Tenant.SubscriptionPlan.FREE)

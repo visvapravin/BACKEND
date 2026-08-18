@@ -3,7 +3,6 @@ package com.forumx.support.chat.entity;
 import com.forumx.auth.entity.User;
 import com.forumx.common.entity.BaseEntity;
 import com.forumx.tenant.entity.Tenant;
-import lombok.Builder;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;

@@ -174,7 +174,6 @@ public class NotificationEmailIntegrationTest {
         authenticationService.register(request);
 
         // Capture published EventEnvelope
-        @SuppressWarnings("unchecked")
         ArgumentCaptor<EventEnvelope<?>> envelopeCaptor = ArgumentCaptor.forClass(EventEnvelope.class);
         verify(eventGateway, timeout(5000)).publish(
                 eq(com.forumx.messaging.constant.MessagingExchanges.NOTIFICATION_EXCHANGE),
@@ -230,16 +229,15 @@ public class NotificationEmailIntegrationTest {
         });
 
         // Capture published EventEnvelope
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<EventEnvelope<?>> envelopeCaptor = ArgumentCaptor.forClass(EventEnvelope.class);
+        ArgumentCaptor<EventEnvelope<?>> envelopeCaptor2 = ArgumentCaptor.forClass(EventEnvelope.class);
         verify(eventGateway, timeout(5000)).publish(
                 eq(com.forumx.messaging.constant.MessagingExchanges.NOTIFICATION_EXCHANGE),
                 eq(com.forumx.messaging.constant.MessagingRoutingKeys.EMAIL_SEND),
-                envelopeCaptor.capture()
+                envelopeCaptor2.capture()
         );
 
         // Simulate RabbitMQ delivery
-        emailEventSubscriber.onEmailSendEvent(envelopeCaptor.getValue());
+        emailEventSubscriber.onEmailSendEvent(envelopeCaptor2.getValue());
 
         // Verify SMTP mail dispatch for offline recipient
         ArgumentCaptor<MimeMessage> captor = ArgumentCaptor.forClass(MimeMessage.class);

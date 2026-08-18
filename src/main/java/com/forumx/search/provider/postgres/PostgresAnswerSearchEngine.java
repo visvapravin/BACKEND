@@ -1,7 +1,6 @@
 package com.forumx.search.provider.postgres;
 
 import com.forumx.answer.entity.Answer;
-import com.forumx.search.config.SearchProperties;
 import com.forumx.search.domain.AnswerSearchResult;
 import com.forumx.search.dto.request.AnswerSearchFilter;
 import com.forumx.search.dto.request.SearchSort;
@@ -25,7 +24,6 @@ public class PostgresAnswerSearchEngine implements AnswerSearchEngine {
     private final EntityManager entityManager;
 
     private final SearchSnippetService snippetService;
-    private final SearchProperties searchProperties;
 
     @Override
     @SuppressWarnings("unchecked")

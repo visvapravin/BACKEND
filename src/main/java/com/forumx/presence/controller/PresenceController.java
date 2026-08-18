@@ -5,24 +5,19 @@ import java.util.Map;
 
 import com.forumx.presence.dto.UserPresence;
 import com.forumx.presence.dto.response.OnlineUsersResponse;
-import com.forumx.presence.dto.response.PresenceResponse;
 import com.forumx.presence.dto.response.PresenceSummary;
 import com.forumx.presence.service.PresenceService;
-import com.forumx.security.facade.AuthenticationFacade;
-import com.forumx.security.model.CustomUserDetails;
 import com.forumx.tenant.resolver.TenantResolver;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -35,7 +30,6 @@ import org.springframework.web.bind.annotation.RestController;
 public class PresenceController {
 
     private final PresenceService presenceService;
-    private final AuthenticationFacade authenticationFacade;
     private final TenantResolver tenantResolver;
     private final com.forumx.auth.repository.UserRepository userRepository;
 
@@ -94,26 +88,5 @@ public class PresenceController {
         }
         int count = presenceService.getTenantOnlineCount(tenantId);
         return ResponseEntity.ok(Map.of("tenantId", tenantId, "onlineCount", count));
-    }
-
-    private CustomUserDetails getAuthenticatedUser() {
-        CustomUserDetails userDetails = authenticationFacade.getCurrentUserDetails();
-        if (userDetails == null) {
-            throw new AccessDeniedException("User is not authenticated");
-        }
-        return userDetails;
-    }
-
-    private PresenceResponse toPresenceResponse(UserPresence p) {
-        return new PresenceResponse(
-                p.getUserId(),
-                p.getUsername(),
-                p.getTenantId(),
-                p.getStatus() == com.forumx.presence.dto.PresenceStatus.ONLINE,
-                p.getStatus() != null ? p.getStatus().name() : "OFFLINE",
-                p.getActiveSessions(),
-                null,
-                p.getLastSeen()
-        );
     }
 }

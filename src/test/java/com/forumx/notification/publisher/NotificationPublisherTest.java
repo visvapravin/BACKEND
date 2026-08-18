@@ -147,7 +147,6 @@ public class NotificationPublisherTest {
         });
 
         // After commit, verify publishing
-        @SuppressWarnings("unchecked")
         ArgumentCaptor<EventEnvelope<?>> envelopeCaptor = ArgumentCaptor.forClass(EventEnvelope.class);
         verify(eventGateway, timeout(2000).times(1)).publish(
                 eq(MessagingExchanges.USER_EVENTS_EXCHANGE),

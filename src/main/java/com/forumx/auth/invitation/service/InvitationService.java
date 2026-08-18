@@ -7,7 +7,6 @@ import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
-import java.util.List;
 import java.util.Optional;
 
 import com.forumx.auth.entity.Role;
@@ -41,7 +40,6 @@ import com.forumx.notification.publisher.NotificationPublisher;
 import com.forumx.security.facade.AuthenticationFacade;
 import com.forumx.security.model.CustomUserDetails;
 import com.forumx.tenant.entity.Tenant;
-import com.forumx.tenant.repository.TenantRepository;
 import com.forumx.tenant.resolver.TenantResolver;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -62,7 +60,6 @@ public class InvitationService {
     private final RoleRepository roleRepository;
     private final UserRoleRepository userRoleRepository;
     private final UserProfileRepository userProfileRepository;
-    private final TenantRepository tenantRepository;
     private final TenantResolver tenantResolver;
     private final AuthenticationFacade authenticationFacade;
     private final PasswordEncoder passwordEncoder;

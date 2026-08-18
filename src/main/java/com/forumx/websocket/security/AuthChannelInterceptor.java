@@ -1,7 +1,5 @@
 package com.forumx.websocket.security;
 
-import com.forumx.auth.entity.User;
-import com.forumx.auth.repository.UserRepository;
 import com.forumx.security.jwt.JwtClaimsConstants;
 import com.forumx.security.jwt.JwtTokenProvider;
 import com.forumx.security.model.CustomUserDetails;
@@ -34,7 +32,6 @@ public class AuthChannelInterceptor implements ChannelInterceptor {
 
     private final JwtTokenProvider jwtTokenProvider;
     private final CustomUserDetailsService userDetailsService;
-    private final UserRepository userRepository;
     private final SupportSessionParticipantRepository participantRepository;
 
     @Override

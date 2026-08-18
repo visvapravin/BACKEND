@@ -50,7 +50,6 @@ public class ChatSubscriberTest {
 
         subscriber.onChatEvent(envelope);
 
-        @SuppressWarnings("unchecked")
         ArgumentCaptor<RealtimeEvent<ChatEvent>> eventCaptor = ArgumentCaptor.forClass(RealtimeEvent.class);
         verify(realtimeGateway).sendToTopic(eq("/topic/tenants/1/chat/200"), eventCaptor.capture());
 

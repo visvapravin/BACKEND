@@ -1,7 +1,6 @@
 package com.forumx.notification.delivery.messaging;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.forumx.messaging.constant.MessagingQueues;
 import com.forumx.messaging.dto.EventEnvelope;
 import com.forumx.notification.delivery.dto.message.NotificationDeadLetterPayload;
 import lombok.RequiredArgsConstructor;

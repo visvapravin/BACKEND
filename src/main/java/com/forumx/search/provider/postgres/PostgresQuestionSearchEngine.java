@@ -2,7 +2,6 @@ package com.forumx.search.provider.postgres;
 
 import com.forumx.question.entity.Question;
 import com.forumx.question.entity.QuestionStatus;
-import com.forumx.search.config.SearchProperties;
 import com.forumx.search.domain.QuestionSearchResult;
 import com.forumx.search.dto.request.QuestionSearchFilter;
 import com.forumx.search.dto.request.SearchSort;
@@ -11,7 +10,6 @@ import com.forumx.search.service.SearchSnippetService;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import jakarta.persistence.Query;
-import java.util.ArrayList;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -27,7 +25,6 @@ public class PostgresQuestionSearchEngine implements QuestionSearchEngine {
     private final EntityManager entityManager;
 
     private final SearchSnippetService snippetService;
-    private final SearchProperties searchProperties;
 
     @Override
     @SuppressWarnings("unchecked")

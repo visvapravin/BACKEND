@@ -26,8 +26,6 @@ import com.forumx.moderation.service.ModerationApplicationService;
 import com.forumx.tenant.entity.Tenant;
 import com.forumx.tenant.repository.TenantRepository;
 import com.forumx.security.model.CustomUserDetails;
-import java.util.HashSet;
-import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;

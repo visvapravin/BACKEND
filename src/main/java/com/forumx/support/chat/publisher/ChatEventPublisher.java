@@ -36,7 +36,7 @@ public class ChatEventPublisher {
         // Broadcast directly to WebSocket subscribers for instant delivery
         try {
             String destination = "/topic/tenants/" + event.tenantId() + "/chat/" + event.sessionId();
-            realtimeGateway.sendToTopic(destination, new RealtimeEvent("CHAT_MESSAGE_SENT", event));
+            realtimeGateway.sendToTopic(destination, new RealtimeEvent<>("CHAT_MESSAGE_SENT", event));
             log.info("Broadcasted ChatMessageSentEvent to WebSocket destination={}", destination);
         } catch (Exception e) {
             log.error("Failed to broadcast chat event to WebSocket. destination error={}", e.getMessage(), e);

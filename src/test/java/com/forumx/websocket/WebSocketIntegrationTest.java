@@ -13,7 +13,6 @@ import com.forumx.auth.repository.RoleRepository;
 import com.forumx.auth.repository.UserProfileRepository;
 import com.forumx.auth.repository.UserRepository;
 import com.forumx.auth.repository.UserRoleRepository;
-import com.forumx.auth.verification.repository.VerificationTokenRepository;
 import com.forumx.bookmark.repository.BookmarkRepository;
 import com.forumx.comment.repository.CommentRepository;
 import com.forumx.question.repository.QuestionRepository;

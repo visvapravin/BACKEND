@@ -2,7 +2,6 @@ package com.forumx.moderation.repository;
 
 import com.forumx.moderation.entity.ModerationReport;
 import com.forumx.moderation.entity.ModerationTargetType;
-import com.forumx.moderation.entity.ReportPriority;
 import com.forumx.moderation.entity.ReportReason;
 import com.forumx.moderation.entity.ReportStatus;
 import java.util.Collection;

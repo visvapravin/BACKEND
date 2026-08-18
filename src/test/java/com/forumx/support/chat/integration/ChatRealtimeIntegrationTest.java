@@ -208,7 +208,6 @@ public class ChatRealtimeIntegrationTest {
         chatEventSubscriber.onChatEvent(envelope);
 
         // 5. Verify WebSocket broadcast to /topic/tenants/{tenantId}/chat/{sessionId}
-        @SuppressWarnings("unchecked")
         ArgumentCaptor<RealtimeEvent<ChatMessageSentEvent>> captor = ArgumentCaptor.forClass(RealtimeEvent.class);
         String expectedTopic = "/topic/tenants/" + tenant.getId() + "/chat/" + session.getId();
         verify(realtimeGateway).sendToTopic(eq(expectedTopic), captor.capture());

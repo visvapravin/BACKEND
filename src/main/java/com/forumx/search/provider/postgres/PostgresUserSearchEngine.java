@@ -1,7 +1,6 @@
 package com.forumx.search.provider.postgres;
 
 import com.forumx.auth.entity.User;
-import com.forumx.search.config.SearchProperties;
 import com.forumx.search.domain.UserSearchResult;
 import com.forumx.search.dto.request.SearchSort;
 import com.forumx.search.dto.request.UserSearchFilter;
@@ -22,8 +21,6 @@ public class PostgresUserSearchEngine implements UserSearchEngine {
 
     @PersistenceContext
     private final EntityManager entityManager;
-
-    private final SearchProperties searchProperties;
 
     @Override
     @SuppressWarnings("unchecked")

@@ -18,7 +18,6 @@ import com.forumx.auth.repository.UserRoleRepository;
 import com.forumx.auth.service.AccountScopeValidator;
 import com.forumx.notification.publisher.NotificationPublisher;
 import com.forumx.security.facade.AuthenticationFacade;
-import com.forumx.tenant.repository.TenantRepository;
 import com.forumx.tenant.resolver.TenantResolver;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -41,7 +40,7 @@ class InvitationServiceScopeTest {
 
         InvitationService service = new InvitationService(
                 invitations, users, mock(RoleRepository.class), userRoles,
-                mock(UserProfileRepository.class), mock(TenantRepository.class),
+                mock(UserProfileRepository.class),
                 mock(TenantResolver.class), mock(AuthenticationFacade.class),
                 mock(PasswordEncoder.class), mock(NotificationPublisher.class),
                 new AccountScopeValidator());

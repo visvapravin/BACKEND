@@ -1,7 +1,5 @@
 package com.forumx.support.ticket;
 
-import com.forumx.auth.enums.RoleType;
-
 import com.forumx.auth.entity.User;
 import com.forumx.auth.repository.UserRepository;
 import com.forumx.security.facade.AuthenticationFacade;
@@ -20,7 +18,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;

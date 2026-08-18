@@ -1,6 +1,5 @@
 package com.forumx.support.ticket.controller;
 
-import com.forumx.auth.repository.UserRepository;
 import com.forumx.security.facade.AuthenticationFacade;
 import com.forumx.security.model.CustomUserDetails;
 import com.forumx.support.ticket.dto.request.AssignTicketRequest;

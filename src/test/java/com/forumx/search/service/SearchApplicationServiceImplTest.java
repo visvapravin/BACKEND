@@ -70,7 +70,6 @@ public class SearchApplicationServiceImplTest {
 
     @Test
     public void testSearchUsersIncludesEmailForAdminUser() {
-        User admin = User.builder().id(1L).username("admin").email("admin@test.com").build();
         CustomUserDetails adminDetails = mock(CustomUserDetails.class);
         doReturn(List.of(new SimpleGrantedAuthority("ROLE_ADMIN"))).when(adminDetails).getAuthorities();
         when(authenticationFacade.getCurrentUserDetails()).thenReturn(adminDetails);

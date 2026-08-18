@@ -11,12 +11,10 @@ import com.forumx.support.chat.entity.ChatMessage;
 import com.forumx.support.chat.entity.ChatSession;
 import com.forumx.support.chat.entity.MessageDeliveryStatus;
 import com.forumx.support.chat.entity.MessageType;
-import com.forumx.support.chat.entity.SupportSessionParticipant;
 import com.forumx.support.chat.event.durable.ChatMessageDeletedEvent;
 import com.forumx.support.chat.event.durable.ChatMessageReadEvent;
 import com.forumx.support.chat.event.durable.ChatMessageSentEvent;
 import com.forumx.support.chat.repository.ChatMessageRepository;
-import com.forumx.support.chat.repository.SupportSessionParticipantRepository;
 import com.forumx.support.chat.service.ChatPermissionService;
 import com.forumx.support.chat.service.ChatService;
 import com.forumx.support.chat.service.ChatSessionService;
@@ -26,7 +24,6 @@ import com.forumx.tenant.resolver.TenantResolver;
 import jakarta.persistence.EntityNotFoundException;
 import java.time.Instant;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -45,8 +42,6 @@ public class ChatServiceImpl implements ChatService {
     private final ChatSessionService chatSessionService;
     private final ChatPermissionService chatPermissionService;
     private final ChatMessageRepository chatMessageRepository;
-    private final SupportSessionParticipantRepository participantRepository;
-    private final com.forumx.support.chat.mapper.ChatMessageMapper chatMessageMapper;
     private final TicketRepository ticketRepository;
     private final UserRepository userRepository;
     private final TenantResolver tenantResolver;
@@ -174,13 +169,13 @@ public class ChatServiceImpl implements ChatService {
                     .orElse(Instant.now());
 
             ChatMessageReadEvent event = new ChatMessageReadEvent(
-                    UUID.randomUUID(),
-                    current.tenantId(),
-                    session.getId(),
-                    ticketId,
-                    current.userId(),
-                    maxTimestamp,
-                    Instant.now()
+                UUID.randomUUID(),
+                current.tenantId(),
+                session.getId(),
+                ticketId,
+                current.userId(),
+                maxTimestamp,
+                Instant.now()
             );
             eventPublisher.publishEvent(event);
         }

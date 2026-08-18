@@ -14,7 +14,6 @@ import com.forumx.search.provider.AnswerSearchEngine;
 import com.forumx.search.provider.QuestionSearchEngine;
 import com.forumx.search.provider.UserSearchEngine;
 import com.forumx.search.service.SearchService;
-import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;

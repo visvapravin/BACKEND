@@ -2,7 +2,6 @@ package com.forumx.notification.delivery.messaging;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.forumx.auth.entity.User;
-import com.forumx.auth.repository.UserRepository;
 import com.forumx.messaging.constant.MessagingQueues;
 import com.forumx.messaging.dto.EventEnvelope;
 import com.forumx.notification.delivery.domain.NotificationDeliveryContext;
@@ -27,7 +26,6 @@ public class NotificationRetryConsumer {
     private final NotificationDeliveryExecutor deliveryExecutor;
     private final NotificationRepository notificationRepository;
     private final TenantRepository tenantRepository;
-    private final UserRepository userRepository;
     private final NotificationDeliveryAttemptRepository attemptRepository;
     private final ObjectMapper objectMapper;
 
