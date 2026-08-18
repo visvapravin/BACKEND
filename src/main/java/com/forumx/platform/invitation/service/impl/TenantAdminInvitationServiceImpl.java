@@ -7,14 +7,16 @@ import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
+import java.util.UUID;
 
-import com.forumx.auth.dto.response.LoginResponse;
 import com.forumx.auth.entity.Role;
 import com.forumx.auth.entity.User;
+import com.forumx.auth.entity.UserProfile;
 import com.forumx.auth.entity.UserRole;
 import com.forumx.auth.enums.RoleType;
 import com.forumx.auth.invitation.entity.InvitationStatus;
 import com.forumx.auth.repository.RoleRepository;
+import com.forumx.auth.repository.UserProfileRepository;
 import com.forumx.auth.repository.UserRepository;
 import com.forumx.auth.repository.UserRoleRepository;
 import com.forumx.auth.service.AccountScopeValidator;
@@ -22,8 +24,13 @@ import com.forumx.common.exception.InvitationAlreadyAcceptedException;
 import com.forumx.common.exception.InvitationAlreadyPendingException;
 import com.forumx.common.exception.InvitationAlreadyRevokedException;
 import com.forumx.common.exception.InvitationNotFoundException;
+import com.forumx.common.exception.PasswordMismatchException;
 import com.forumx.common.exception.UsernameAlreadyExistsException;
+import com.forumx.notification.dto.NotificationEvent;
+import com.forumx.notification.email.EmailTemplateType;
+import com.forumx.notification.publisher.NotificationPublisher;
 import com.forumx.platform.invitation.dto.AcceptTenantAdminInvitationRequest;
+import com.forumx.platform.invitation.dto.AcceptTenantAdminInvitationResponse;
 import com.forumx.platform.invitation.dto.CreateTenantAdminInvitationRequest;
 import com.forumx.platform.invitation.dto.TenantAdminInvitationResponse;
 import com.forumx.platform.invitation.dto.ValidateTenantAdminInvitationResponse;
@@ -38,9 +45,11 @@ import jakarta.persistence.EntityNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.util.UriComponentsBuilder;
 
 @Slf4j
 @Service
@@ -54,9 +63,16 @@ public class TenantAdminInvitationServiceImpl implements TenantAdminInvitationSe
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
     private final UserRoleRepository userRoleRepository;
+    private final UserProfileRepository userProfileRepository;
     private final PasswordEncoder passwordEncoder;
     private final AuthenticationFacade authenticationFacade;
     private final AccountScopeValidator accountScopeValidator;
+    private final NotificationPublisher notificationPublisher;
+
+    @Value("${app.frontend.base-url}")
+    private String frontendBaseUrl;
+
+    // -- Create Invitation --
 
     @Override
     @Transactional
@@ -95,9 +111,12 @@ public class TenantAdminInvitationServiceImpl implements TenantAdminInvitationSe
         log.info("TENANT_ADMIN_INVITATION_CREATED tenantId={} inviterId={} email={} invitationId={}",
                 tenantId, inviter.getId(), normalizedEmail, saved.getId());
 
-        // In production email notification dispatches rawToken
+        dispatchInvitationEmail(tenant, inviter, normalizedEmail, rawToken);
+
         return mapToResponse(saved);
     }
+
+    // -- Validate Invitation --
 
     @Override
     @Transactional(readOnly = true)
@@ -123,9 +142,18 @@ public class TenantAdminInvitationServiceImpl implements TenantAdminInvitationSe
                 .build();
     }
 
+    // -- Accept Invitation --
+
     @Override
     @Transactional
-    public LoginResponse acceptInvitation(AcceptTenantAdminInvitationRequest request, HttpServletRequest servletRequest) {
+    public AcceptTenantAdminInvitationResponse acceptInvitation(
+            AcceptTenantAdminInvitationRequest request,
+            HttpServletRequest servletRequest) {
+
+        if (request.getPassword() == null || !request.getPassword().equals(request.getConfirmPassword())) {
+            throw new PasswordMismatchException("Passwords do not match");
+        }
+
         String tokenHash = hashToken(request.getToken());
         TenantAdminInvitation invitation = invitationRepository.findByTokenHashAndDeletedFalse(tokenHash)
                 .orElseThrow(() -> new InvitationNotFoundException("Invalid or missing invitation token"));
@@ -145,10 +173,9 @@ public class TenantAdminInvitationServiceImpl implements TenantAdminInvitationSe
         Tenant tenant = invitation.getTenant();
         RoleType roleType = RoleType.TENANT_ADMIN;
 
-        // Account Scope Invariant Verification before persistence
         accountScopeValidator.validate(roleType, tenant);
 
-        if (userRepository.existsByTenantIdAndUsername(tenant.getId(), request.getUsername())) {
+        if (userRepository.existsByTenantIdAndUsername(tenant.getId(), request.getUsername().trim())) {
             throw new UsernameAlreadyExistsException("Username already exists in tenant");
         }
         if (userRepository.existsByEmail(invitation.getEmail())) {
@@ -156,7 +183,8 @@ public class TenantAdminInvitationServiceImpl implements TenantAdminInvitationSe
         }
 
         Role tenantAdminRole = roleRepository.findByRoleName(roleType)
-                .orElseGet(() -> roleRepository.save(Role.builder().roleName(roleType).active(true).build()));
+                .orElseThrow(() -> new IllegalStateException(
+                        "TENANT_ADMIN role not found in database. Ensure Flyway migrations have run."));
 
         User user = User.builder()
                 .tenant(tenant)
@@ -170,13 +198,18 @@ public class TenantAdminInvitationServiceImpl implements TenantAdminInvitationSe
 
         User savedUser = userRepository.save(user);
 
+        UserProfile profile = UserProfile.builder()
+                .user(savedUser)
+                .build();
+        userProfileRepository.save(profile);
+
         UserRole userRole = UserRole.builder()
                 .user(savedUser)
                 .role(tenantAdminRole)
                 .active(true)
                 .build();
-
         userRoleRepository.save(userRole);
+        savedUser.getUserRoles().add(userRole);
 
         invitation.setStatus(InvitationStatus.ACCEPTED);
         invitation.setAcceptedAt(Instant.now());
@@ -185,14 +218,43 @@ public class TenantAdminInvitationServiceImpl implements TenantAdminInvitationSe
         log.info("TENANT_ADMIN_INVITATION_ACCEPTED userId={} tenantSlug={} email={}",
                 savedUser.getId(), tenant.getSlug(), invitation.getEmail());
 
-        return LoginResponse.builder()
-                .userId(savedUser.getId())
+        return AcceptTenantAdminInvitationResponse.builder()
+                .message("Invitation accepted successfully. Please log in with your credentials.")
+                .loginRequired(true)
                 .username(savedUser.getUsername())
                 .email(savedUser.getEmail())
-                .tenantId(tenant.getId())
-                .roles(java.util.List.of("TENANT_ADMIN"))
-                .tokenType("Bearer")
+                .tenantSlug(tenant.getSlug())
+                .nextAction("PROCEED_TO_LOGIN")
                 .build();
+    }
+
+    // -- Private helpers --
+
+    private void dispatchInvitationEmail(Tenant tenant, User inviter, String email, String rawToken) {
+        try {
+            String invitationUrl = UriComponentsBuilder.fromHttpUrl(frontendBaseUrl)
+                    .path("/accept-admin-invitation")
+                    .queryParam("token", rawToken)
+                    .build()
+                    .toUriString();
+
+            NotificationEvent event = new NotificationEvent(
+                    UUID.randomUUID(),
+                    tenant.getId(),
+                    inviter.getId(),
+                    email,
+                    "You have been invited as a Tenant Administrator",
+                    invitationUrl,
+                    EmailTemplateType.MODERATOR_INVITATION.name(),
+                    Instant.now()
+            );
+            notificationPublisher.publish(event);
+            log.info("Published TENANT_ADMIN_INVITATION email event for email={} under tenant={}",
+                    email, tenant.getSlug());
+        } catch (Exception e) {
+            log.error("Failed to publish tenant admin invitation email for email={}: {}",
+                    email, e.getMessage());
+        }
     }
 
     private String generateRawToken() {

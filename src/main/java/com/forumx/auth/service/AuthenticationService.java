@@ -89,6 +89,7 @@ public class AuthenticationService {
     private final PasswordResetTokenRepository passwordResetTokenRepository;
     private final GoogleTokenVerifierService googleTokenVerifierService;
     private final com.forumx.notification.publisher.NotificationPublisher notificationPublisher;
+    private final AccountScopeValidator accountScopeValidator;
 
     @Value("${app.frontend.base-url}")
     private String frontendBaseUrl;
@@ -399,9 +400,9 @@ public class AuthenticationService {
                 .userId(user.getId())
                 .username(user.getUsername())
                 .email(user.getEmail())
-
-                .tenantId(user.getTenant().getId())
-                .tenantSlug(user.getTenant().getSlug())
+                // Platform Admin has no tenant — safely return null for tenant fields
+                .tenantId(user.getTenant() != null ? user.getTenant().getId() : null)
+                .tenantSlug(user.getTenant() != null ? user.getTenant().getSlug() : null)
                 .active(user.getStatus() == User.UserStatus.ACTIVE)
                 .enabled(user.isEnabled())
                 .accountNonLocked(!user.isAccountLocked())
@@ -481,6 +482,7 @@ public class AuthenticationService {
      * @return the configured User entity
      */
     private User createUser(RegisterRequest request, Tenant tenant, String hashedPassword) {
+        accountScopeValidator.validate(RoleType.USER, tenant);
         User user = authMapper.toUser(request);
         user.setTenant(tenant);
         user.setPasswordHash(hashedPassword);
@@ -499,20 +501,16 @@ public class AuthenticationService {
     /**
      * Assigns the default ROLE_USER to the specified user.
      *
+     * <p>Public registration always and only assigns ROLE_USER.
+     * Elevated roles (MODERATOR, TENANT_ADMIN, PLATFORM_ADMIN) are exclusively
+     * granted through dedicated invitation flows and the platform bootstrap process.
+     * No username pattern or any other heuristic may bypass this rule.
+     *
      * @param user the target User
      */
     private void assignDefaultRole(User user) {
-        RoleType targetRoleType = RoleType.USER;
-        if (user.getUsername().startsWith("mod_") || user.getUsername().contains("moderator")) {
-            targetRoleType = RoleType.MODERATOR;
-        } else if (user.getUsername().startsWith("admin_") || user.getUsername().contains("admin")) {
-            targetRoleType = RoleType.TENANT_ADMIN;
-        }
-
-        final RoleType finalRoleType = targetRoleType;
-        Role role = roleRepository.findByRoleName(finalRoleType)
-                .orElseGet(() -> roleRepository.findByRoleName(RoleType.USER)
-                        .orElseThrow(() -> new IllegalArgumentException("Default Role USER not found")));
+        Role role = roleRepository.findByRoleName(RoleType.USER)
+                .orElseThrow(() -> new IllegalArgumentException("Default Role USER not found in database. Ensure Flyway migrations have run."));
 
         UserRole userRole = UserRole.builder()
                 .user(user)
@@ -520,6 +518,7 @@ public class AuthenticationService {
                 .active(true)
                 .build();
         userRoleRepository.save(userRole);
+        user.getUserRoles().add(userRole);
     }
 
     /**

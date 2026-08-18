@@ -153,6 +153,7 @@ class TenantProvisioningE2EIntegrationTest {
                 .token(rawTokenA)
                 .username(adminUsernameA)
                 .password(defaultPassword)
+                .confirmPassword(defaultPassword)
                 .build();
 
         mvc.perform(post("/api/v1/auth/tenant-admin-invitations/accept")
@@ -189,7 +190,7 @@ class TenantProvisioningE2EIntegrationTest {
                         .header("X-Tenant", slugA)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(mapper.writeValueAsString(inviteModReqA)))
-                .andExpect(status().isOk())
+                .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
 
         Long modInviteIdA = mapper.readTree(modInviteAResp).path("data").path("id").asLong();
@@ -205,6 +206,7 @@ class TenantProvisioningE2EIntegrationTest {
         acceptModA.setToken(rawTokenModA);
         acceptModA.setUsername(modUsernameA);
         acceptModA.setPassword(defaultPassword);
+        acceptModA.setConfirmPassword(defaultPassword);
 
         mvc.perform(post("/api/v1/invitations/accept")
                         .contentType(MediaType.APPLICATION_JSON)

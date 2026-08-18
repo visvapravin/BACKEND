@@ -344,6 +344,7 @@ public class InvitationService {
                 .active(true)
                 .build();
         userRoleRepository.save(userRole);
+        savedUser.getUserRoles().add(userRole);
 
         // Mark invitation ACCEPTED
         invitation.setStatus(InvitationStatus.ACCEPTED);

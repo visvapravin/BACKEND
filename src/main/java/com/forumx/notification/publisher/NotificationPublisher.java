@@ -19,7 +19,8 @@ public class NotificationPublisher {
     private final EmailService emailService;
 
     public void publish(NotificationEvent event) {
-        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+        RabbitTemplate rabbitTemplate = rabbitTemplateProvider.getIfAvailable();
+        if (rabbitTemplate != null && TransactionSynchronizationManager.isSynchronizationActive()) {
             log.info("Transaction active. Deferring publishing of notification for {} until after commit.", event.email());
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override

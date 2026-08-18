@@ -1,6 +1,6 @@
 package com.forumx.platform.invitation.controller;
 
-import com.forumx.auth.dto.response.LoginResponse;
+import com.forumx.platform.invitation.dto.AcceptTenantAdminInvitationResponse;
 import com.forumx.common.dto.ApiResponse;
 import com.forumx.platform.invitation.dto.AcceptTenantAdminInvitationRequest;
 import com.forumx.platform.invitation.dto.ValidateTenantAdminInvitationResponse;
@@ -38,12 +38,12 @@ public class PublicTenantAdminInvitationController {
     }
 
     @PostMapping("/accept")
-    @Operation(summary = "Accept Tenant Admin Invitation", description = "Accepts invitation, creates TENANT_ADMIN user bound to tenant")
-    public ResponseEntity<ApiResponse<LoginResponse>> acceptInvitation(
+    @Operation(summary = "Accept Tenant Admin Invitation", description = "Accepts invitation, creates TENANT_ADMIN user bound to tenant. The user must subsequently log in via POST /api/v1/auth/login with the X-Tenant header.")
+    public ResponseEntity<ApiResponse<AcceptTenantAdminInvitationResponse>> acceptInvitation(
             @Valid @RequestBody AcceptTenantAdminInvitationRequest request,
             HttpServletRequest servletRequest
     ) {
-        LoginResponse response = invitationService.acceptInvitation(request, servletRequest);
-        return ResponseEntity.ok(ApiResponse.success("Invitation accepted successfully. Account created.", response));
+        AcceptTenantAdminInvitationResponse response = invitationService.acceptInvitation(request, servletRequest);
+        return ResponseEntity.ok(ApiResponse.success(response.getMessage(), response));
     }
 }
