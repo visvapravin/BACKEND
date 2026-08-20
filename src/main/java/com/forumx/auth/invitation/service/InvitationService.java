@@ -1,20 +1,10 @@
 package com.forumx.auth.invitation.service;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.security.SecureRandom;
-import java.time.Duration;
-import java.time.Instant;
-import java.util.Base64;
-import java.util.Optional;
-
 import com.forumx.auth.entity.Role;
 import com.forumx.auth.entity.User;
 import com.forumx.auth.entity.UserProfile;
 import com.forumx.auth.entity.UserRole;
 import com.forumx.auth.enums.RoleType;
-import com.forumx.auth.service.AccountScopeValidator;
 import com.forumx.auth.invitation.dto.request.AcceptInvitationRequest;
 import com.forumx.auth.invitation.dto.request.CreateInvitationRequest;
 import com.forumx.auth.invitation.dto.response.AcceptInvitationResponse;
@@ -27,21 +17,15 @@ import com.forumx.auth.repository.RoleRepository;
 import com.forumx.auth.repository.UserProfileRepository;
 import com.forumx.auth.repository.UserRepository;
 import com.forumx.auth.repository.UserRoleRepository;
-import com.forumx.common.exception.ExpiredTokenException;
-import com.forumx.common.exception.InvalidTokenException;
-import com.forumx.common.exception.InvitationAlreadyAcceptedException;
-import com.forumx.common.exception.InvitationAlreadyPendingException;
-import com.forumx.common.exception.InvitationAlreadyRevokedException;
-import com.forumx.common.exception.InvitationNotFoundException;
-import com.forumx.common.exception.PasswordMismatchException;
-import com.forumx.common.exception.UsernameAlreadyExistsException;
+import com.forumx.auth.service.AccountScopeValidator;
+import com.forumx.common.exception.*;
 import com.forumx.notification.email.EmailTemplateType;
 import com.forumx.notification.publisher.NotificationPublisher;
 import com.forumx.security.facade.AuthenticationFacade;
 import com.forumx.security.model.CustomUserDetails;
 import com.forumx.tenant.entity.Tenant;
+import com.forumx.tenant.repository.TenantRepository;
 import com.forumx.tenant.resolver.TenantResolver;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.access.AccessDeniedException;
@@ -50,9 +34,17 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.util.UriComponentsBuilder;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.Base64;
+import java.util.Optional;
+
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class InvitationService {
 
     private final ModeratorInvitationRepository invitationRepository;
@@ -60,21 +52,47 @@ public class InvitationService {
     private final RoleRepository roleRepository;
     private final UserRoleRepository userRoleRepository;
     private final UserProfileRepository userProfileRepository;
+    private final TenantRepository tenantRepository;
     private final TenantResolver tenantResolver;
     private final AuthenticationFacade authenticationFacade;
     private final PasswordEncoder passwordEncoder;
     private final NotificationPublisher notificationPublisher;
     private final AccountScopeValidator accountScopeValidator;
 
-    @Value("${app.frontend.base-url}")
-    private String frontendBaseUrl;
+    public InvitationService(
+            ModeratorInvitationRepository invitationRepository,
+            UserRepository userRepository,
+            RoleRepository roleRepository,
+            UserRoleRepository userRoleRepository,
+            UserProfileRepository userProfileRepository,
+            TenantRepository tenantRepository,
+            TenantResolver tenantResolver,
+            AuthenticationFacade authenticationFacade,
+            PasswordEncoder passwordEncoder,
+            NotificationPublisher notificationPublisher,
+            AccountScopeValidator accountScopeValidator
+    ) {
+        this.invitationRepository = invitationRepository;
+        this.userRepository = userRepository;
+        this.roleRepository = roleRepository;
+        this.userRoleRepository = userRoleRepository;
+        this.userProfileRepository = userProfileRepository;
+        this.tenantRepository = tenantRepository;
+        this.tenantResolver = tenantResolver;
+        this.authenticationFacade = authenticationFacade;
+        this.passwordEncoder = passwordEncoder;
+        this.notificationPublisher = notificationPublisher;
+        this.accountScopeValidator = accountScopeValidator;
+    }
 
-    @Value("${app.invitation.expiration:7d}")
+    @Value("${forumx.invitation.expiration:P7D}")
     private Duration invitationExpiration;
 
+    @Value("${forumx.frontend.base-url:http://localhost:3000}")
+    private String frontendBaseUrl;
+
     /**
-     * Creates a new Moderator invitation for the specified email within the active tenant.
-     * Accessible by TENANT_ADMIN and PLATFORM_ADMIN.
+     * Creates a new moderator invitation, hashes the token, persists it, and dispatches an email.
      */
     @Transactional
     public InvitationResponse createModeratorInvitation(CreateInvitationRequest request) {
@@ -92,17 +110,24 @@ public class InvitationService {
         User inviter = userRepository.findByIdAndDeletedFalse(userDetails.getUserId())
                 .orElseThrow(() -> new AccessDeniedException("Inviter user not found"));
 
-        if (!inviter.getTenant().getId().equals(tenantId)) {
-            throw new AccessDeniedException("Inviter does not belong to the target tenant");
+        if (!userRoleRepository.existsActiveRoleByUserIdAndTenantIdAndRoleName(inviter.getId(), tenantId, RoleType.TENANT_ADMIN)) {
+            throw new AccessDeniedException("Inviter does not have TENANT_ADMIN role in the target tenant");
         }
 
-        Tenant tenant = inviter.getTenant();
+        Tenant tenant = tenantRepository.findByIdAndDeletedFalse(tenantId)
+                .orElseThrow(() -> new AccessDeniedException("Target tenant not found or inactive"));
         String normalizedEmail = request.getEmail().trim().toLowerCase();
 
-        // Check if email already belongs to an existing registered user
-        if (userRepository.existsByEmail(normalizedEmail)) {
-            log.warn("Invitation rejected: Account already exists for email {}", normalizedEmail);
-            throw new IllegalArgumentException("Account already exists for this email. Tenant administrator must use staff management role assignment.");
+        // Check if existing user in this tenant already has higher or equal role
+        Optional<User> existingUserOpt = userRepository.findByEmailAndDeletedFalse(normalizedEmail);
+        if (existingUserOpt.isPresent()) {
+            User existingUser = existingUserOpt.get();
+            if (userRoleRepository.existsActiveRoleByUserIdAndTenantIdAndRoleName(existingUser.getId(), tenantId, RoleType.TENANT_ADMIN)) {
+                throw new IllegalArgumentException("User is already a Tenant Administrator in this workspace");
+            }
+            if (userRoleRepository.existsActiveRoleByUserIdAndTenantIdAndRoleName(existingUser.getId(), tenantId, RoleType.MODERATOR)) {
+                throw new IllegalArgumentException("User is already a Moderator in this workspace");
+            }
         }
 
         // Check active pending invitations for same email & tenant
@@ -166,10 +191,6 @@ public class InvitationService {
     /**
      * Rotates the credentials for an existing invitation and sends it through the
      * same notification pipeline used when an invitation is first created.
-     *
-     * <p>The tenant and actor come exclusively from the authenticated request
-     * context.  Keeping this lifecycle operation here prevents staff management
-     * from duplicating the Phase B token generation and email dispatch logic.</p>
      */
     @Transactional
     public ModeratorInvitation resendModeratorInvitation(Long invitationId) {
@@ -266,15 +287,11 @@ public class InvitationService {
     }
 
     /**
-     * Accepts a moderator invitation, creates the user account in the invitation tenant,
-     * assigns MODERATOR role, and marks the invitation ACCEPTED.
+     * Accepts a moderator invitation, binding or promoting the user account in the invitation tenant,
+     * assigning MODERATOR role, and marking the invitation ACCEPTED.
      */
     @Transactional
     public AcceptInvitationResponse acceptInvitation(AcceptInvitationRequest request) {
-        if (request.getPassword() == null || !request.getPassword().equals(request.getConfirmPassword())) {
-            throw new PasswordMismatchException("Passwords do not match");
-        }
-
         String tokenHash = hashToken(request.getToken());
         ModeratorInvitation invitation = invitationRepository.findByTokenHashForUpdate(tokenHash)
                 .orElseThrow(() -> new InvitationNotFoundException("Invitation token is invalid or not found"));
@@ -298,57 +315,104 @@ public class InvitationService {
         Tenant tenant = invitation.getTenant();
         String email = invitation.getEmail();
 
-        // Enforce the account-scope invariant before any tenant-dependent
-        // lookup or persistence. The invitation is the trusted tenant source.
+        // Enforce account-scope invariant
         accountScopeValidator.validate(RoleType.MODERATOR, tenant);
 
-        // Check username uniqueness in tenant
-        if (userRepository.existsByTenantIdAndUsername(tenant.getId(), request.getUsername())) {
-            throw new UsernameAlreadyExistsException("Username already exists in tenant");
-        }
-
-        // Check email uniqueness globally
-        if (userRepository.existsByEmail(email)) {
-            throw new IllegalArgumentException("Account already exists for this email address");
-        }
-
-        // Create new User
-        User user = User.builder()
-                .tenant(tenant)
-                .username(request.getUsername())
-                .email(email)
-                .passwordHash(passwordEncoder.encode(request.getPassword()))
-                .enabled(true)
-                .emailVerified(true)
-                .status(User.UserStatus.ACTIVE)
-                .build();
-
-        User savedUser = userRepository.save(user);
-
-        // Create UserProfile
-        UserProfile profile = UserProfile.builder()
-                .user(savedUser)
-                .build();
-        userProfileRepository.save(profile);
-
-        // Assign MODERATOR role
         Role moderatorRole = roleRepository.findByRoleName(RoleType.MODERATOR)
                 .orElseThrow(() -> new IllegalStateException("MODERATOR role not found"));
 
-        UserRole userRole = UserRole.builder()
-                .user(savedUser)
-                .role(moderatorRole)
-                .active(true)
-                .build();
-        userRoleRepository.save(userRole);
-        savedUser.getUserRoles().add(userRole);
+        Optional<User> existingUserOpt = userRepository.findByEmailAndDeletedFalse(email);
+        User effectiveUser;
+
+        if (existingUserOpt.isPresent()) {
+            effectiveUser = existingUserOpt.get();
+
+            // Check if user already has TENANT_ADMIN or MODERATOR in target tenant
+            boolean hasTenantAdmin = userRoleRepository.existsActiveRoleByUserIdAndTenantIdAndRoleName(
+                    effectiveUser.getId(), tenant.getId(), RoleType.TENANT_ADMIN);
+
+            Optional<UserRole> existingRoleOpt = userRoleRepository.findByUserIdAndTenantIdAndRoleId(
+                    effectiveUser.getId(), tenant.getId(), moderatorRole.getId());
+
+            if (!hasTenantAdmin) {
+                if (existingRoleOpt.isEmpty()) {
+                    UserRole userRole = UserRole.builder()
+                            .user(effectiveUser)
+                            .tenant(tenant)
+                            .role(moderatorRole)
+                            .active(true)
+                            .assignedByUserId(invitation.getInvitedBy() != null ? invitation.getInvitedBy().getId() : null)
+                            .build();
+                    userRoleRepository.save(userRole);
+                } else {
+                    UserRole existingRole = existingRoleOpt.get();
+                    if (!existingRole.isActiveAssignment()) {
+                        existingRole.activate();
+                        userRoleRepository.save(existingRole);
+                    }
+                }
+            }
+
+            if (request.getPassword() != null && !request.getPassword().isBlank()) {
+                if (!request.getPassword().equals(request.getConfirmPassword())) {
+                    throw new PasswordMismatchException("Passwords do not match");
+                }
+                if (effectiveUser.getPasswordHash() == null) {
+                    effectiveUser.setPasswordHash(passwordEncoder.encode(request.getPassword()));
+                    userRepository.save(effectiveUser);
+                }
+            }
+
+        } else {
+            // New user registration
+            if (request.getPassword() == null || !request.getPassword().equals(request.getConfirmPassword())) {
+                throw new PasswordMismatchException("Passwords do not match");
+            }
+
+            if (request.getUsername() == null || request.getUsername().trim().isBlank()) {
+                throw new IllegalArgumentException("Username is required");
+            }
+
+            String chosenUsername = request.getUsername().trim();
+            if (userRepository.findByUsernameAndDeletedFalse(chosenUsername).isPresent()) {
+                throw new UsernameAlreadyExistsException("Username already exists");
+            }
+
+            User user = User.builder()
+                    .tenant(null)
+                    .username(chosenUsername)
+                    .email(email)
+                    .passwordHash(passwordEncoder.encode(request.getPassword()))
+                    .enabled(true)
+                    .emailVerified(true)
+                    .status(User.UserStatus.ACTIVE)
+                    .build();
+
+            effectiveUser = userRepository.save(user);
+
+            UserProfile profile = UserProfile.builder()
+                    .user(effectiveUser)
+                    .build();
+            userProfileRepository.save(profile);
+            effectiveUser.setUserProfile(profile);
+
+            UserRole userRole = UserRole.builder()
+                    .user(effectiveUser)
+                    .tenant(tenant)
+                    .role(moderatorRole)
+                    .active(true)
+                    .assignedByUserId(invitation.getInvitedBy() != null ? invitation.getInvitedBy().getId() : null)
+                    .build();
+            userRoleRepository.save(userRole);
+        }
 
         // Mark invitation ACCEPTED
         invitation.setStatus(InvitationStatus.ACCEPTED);
         invitation.setAcceptedAt(Instant.now());
         invitationRepository.save(invitation);
 
-        log.info("Invitation accepted successfully: email={}, username={}, tenant={}", email, savedUser.getUsername(), tenant.getSlug());
+        log.info("Invitation accepted successfully: email={}, username={}, tenant={}",
+                email, effectiveUser.getUsername(), tenant.getSlug());
 
         return AcceptInvitationResponse.builder()
                 .message("Invitation accepted successfully. Please log in with your credentials.")
@@ -374,7 +438,7 @@ public class InvitationService {
             }
             return hexString.toString();
         } catch (NoSuchAlgorithmException e) {
-            throw new RuntimeException("SHA-256 algorithm not available", e);
+            throw new IllegalStateException("SHA-256 algorithm not available", e);
         }
     }
 

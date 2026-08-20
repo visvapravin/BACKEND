@@ -38,6 +38,10 @@ public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificat
      */
     boolean existsByEmail(String email);
 
+    Optional<User> findByEmailAndDeletedFalse(String email);
+
+    Optional<User> findByUsernameAndDeletedFalse(String username);
+
     Page<User> findAllByTenantIdAndDeletedFalse(Long tenantId, Pageable pageable);
 
     List<User> findAllByStatus(UserStatus status);
@@ -48,32 +52,37 @@ public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificat
 
     @Query("""
             SELECT DISTINCT u FROM User u
-            LEFT JOIN FETCH u.tenant
-            LEFT JOIN FETCH u.userRoles ur
-            LEFT JOIN FETCH ur.role r
-            LEFT JOIN FETCH r.rolePermissions rp
-            LEFT JOIN FETCH rp.permission
-            WHERE u.tenant.id = :tenantId
+            JOIN u.userRoles ur
+            JOIN ur.role r
+            WHERE ur.tenant.id = :tenantId
               AND (u.username = :usernameOrEmail OR u.email = :usernameOrEmail)
               AND u.deleted = false
               AND u.enabled = true
+              AND ur.active = true
+              AND ur.deleted = false
+              AND (ur.expiresAt IS NULL OR ur.expiresAt > CURRENT_TIMESTAMP)
             """)
     Optional<User> findForAuthenticationByTenantIdAndUsernameOrEmail(@Param("tenantId") Long tenantId,
                                                                      @Param("usernameOrEmail") String usernameOrEmail);
 
     @Query("""
             SELECT DISTINCT u FROM User u
-            LEFT JOIN FETCH u.userRoles ur LEFT JOIN FETCH ur.role r
-            LEFT JOIN FETCH r.rolePermissions rp LEFT JOIN FETCH rp.permission
-            WHERE u.tenant IS NULL AND u.deleted = false AND u.enabled = true
+            JOIN FETCH u.userRoles ur
+            JOIN FETCH ur.role r
+            LEFT JOIN FETCH r.rolePermissions rp
+            LEFT JOIN FETCH rp.permission
+            WHERE ur.tenant IS NULL
+              AND u.deleted = false
+              AND u.enabled = true
               AND (u.username = :usernameOrEmail OR u.email = :usernameOrEmail)
-              AND ur.active = true AND ur.deleted = false
+              AND ur.active = true
+              AND ur.deleted = false
               AND r.roleName = com.forumx.auth.enums.RoleType.PLATFORM_ADMIN
             """)
     Optional<User> findPlatformUserForAuthentication(@Param("usernameOrEmail") String usernameOrEmail);
 
     @Query("SELECT COUNT(ur) > 0 FROM UserRole ur JOIN ur.role r " +
-           "WHERE ur.user.tenant IS NULL AND ur.user.deleted = false " +
+           "WHERE ur.tenant IS NULL AND ur.user.deleted = false " +
            "AND ur.active = true AND ur.deleted = false " +
            "AND r.roleName = com.forumx.auth.enums.RoleType.PLATFORM_ADMIN")
     boolean existsPlatformAdmin();
@@ -113,7 +122,7 @@ public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificat
             SELECT DISTINCT u FROM User u
             JOIN u.userRoles ur
             JOIN ur.role r
-            WHERE u.tenant.id = :tenantId
+            WHERE ur.tenant.id = :tenantId
               AND u.deleted = false
               AND u.enabled = true
               AND ur.deleted = false
@@ -125,4 +134,32 @@ public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificat
             """)
     List<User> findUsersByTenantIdAndRoles(@Param("tenantId") Long tenantId,
                                            @Param("roleNames") java.util.Collection<com.forumx.auth.enums.RoleType> roleNames);
+
+    @Query(
+        value = """
+            SELECT DISTINCT u FROM User u
+            JOIN u.userRoles ur
+            JOIN ur.role r
+            WHERE ur.tenant.id = :tenantId
+              AND r.roleName = :roleName
+              AND ur.active = true
+              AND ur.deleted = false
+              AND (ur.expiresAt IS NULL OR ur.expiresAt > CURRENT_TIMESTAMP)
+              AND u.deleted = false
+            """,
+        countQuery = """
+            SELECT COUNT(DISTINCT u.id) FROM User u
+            JOIN u.userRoles ur
+            JOIN ur.role r
+            WHERE ur.tenant.id = :tenantId
+              AND r.roleName = :roleName
+              AND ur.active = true
+              AND ur.deleted = false
+              AND (ur.expiresAt IS NULL OR ur.expiresAt > CURRENT_TIMESTAMP)
+              AND u.deleted = false
+            """
+    )
+    Page<User> findUsersWithActiveRoleInTenant(@Param("tenantId") Long tenantId,
+                                               @Param("roleName") com.forumx.auth.enums.RoleType roleName,
+                                               Pageable pageable);
 }

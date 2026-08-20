@@ -1,5 +1,8 @@
 package com.forumx.platform.tenant.service.impl;
 
+import com.forumx.auth.invitation.repository.ModeratorInvitationRepository;
+import com.forumx.auth.repository.RefreshTokenRepository;
+import com.forumx.platform.invitation.repository.TenantAdminInvitationRepository;
 import com.forumx.platform.tenant.dto.CreateTenantRequest;
 import com.forumx.platform.tenant.dto.TenantResponse;
 import com.forumx.platform.tenant.service.PlatformTenantService;
@@ -13,12 +16,17 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class PlatformTenantServiceImpl implements PlatformTenantService {
 
     private final TenantRepository tenantRepository;
+    private final RefreshTokenRepository refreshTokenRepository;
+    private final ModeratorInvitationRepository moderatorInvitationRepository;
+    private final TenantAdminInvitationRepository tenantAdminInvitationRepository;
 
     @Override
     @Transactional
@@ -65,6 +73,50 @@ public class PlatformTenantServiceImpl implements PlatformTenantService {
         Tenant tenant = tenantRepository.findByIdAndDeletedFalse(tenantId)
                 .orElseThrow(() -> new EntityNotFoundException("Tenant not found with ID: " + tenantId));
         return mapToResponse(tenant);
+    }
+
+    /**
+     * Safely deactivates a tenant:
+     * <ol>
+     *   <li>Loads only a currently active, non-deleted tenant.</li>
+     *   <li>Marks it INACTIVE and applies soft-delete semantics.</li>
+     *   <li>Revokes all active user refresh tokens (bulk — single UPDATE).</li>
+     *   <li>Revokes all outstanding PENDING invitations (moderator + tenant admin).</li>
+     * </ol>
+     * All steps run within a single transaction so a mid-flight failure rolls back entirely.
+     *
+     * @param tenantId the ID of the tenant to deactivate
+     * @throws EntityNotFoundException if the tenant does not exist or is already deactivated/deleted
+     */
+    @Override
+    @Transactional
+    public void deactivateTenant(Long tenantId) {
+        Tenant tenant = tenantRepository.findByIdAndDeletedFalse(tenantId)
+                .orElseThrow(() -> new EntityNotFoundException("Tenant not found with ID: " + tenantId));
+
+        if (!tenant.isActive()) {
+            // Already inactive — idempotent: treat as success rather than error
+            log.info("PLATFORM_TENANT_DEACTIVATE_NOOP tenantId={} status={} (already inactive)",
+                    tenantId, tenant.getStatus());
+            return;
+        }
+
+        // 1. Mark tenant INACTIVE + soft-delete
+        tenant.deactivate();           // sets status = INACTIVE
+        tenant.setDeleted(true);
+        tenant.setDeletedAt(Instant.now());
+        tenantRepository.save(tenant);
+
+        // 2. Revoke all active refresh tokens for users of this tenant (single UPDATE)
+        refreshTokenRepository.revokeAllByTenantId(tenantId);
+
+        // 3. Revoke all outstanding PENDING moderator invitations for this tenant
+        moderatorInvitationRepository.revokeAllPendingByTenantId(tenantId);
+
+        // 4. Revoke all outstanding PENDING tenant admin invitations for this tenant
+        tenantAdminInvitationRepository.revokeAllPendingByTenantId(tenantId);
+
+        log.info("PLATFORM_TENANT_DEACTIVATED tenantId={} slug={}", tenantId, tenant.getSlug());
     }
 
     private TenantResponse mapToResponse(Tenant tenant) {

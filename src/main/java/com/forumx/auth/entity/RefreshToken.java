@@ -3,6 +3,7 @@ package com.forumx.auth.entity;
 import java.time.Instant;
 
 import com.forumx.common.entity.BaseEntity;
+import com.forumx.tenant.entity.Tenant;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -36,6 +37,8 @@ import lombok.experimental.SuperBuilder;
         },
         indexes = {
                 @Index(name = "idx_refresh_tokens_user_id", columnList = "user_id"),
+                @Index(name = "idx_refresh_tokens_tenant_id", columnList = "tenant_id"),
+                @Index(name = "idx_refresh_tokens_user_tenant", columnList = "user_id,tenant_id"),
                 @Index(name = "idx_refresh_tokens_token", columnList = "token"),
                 @Index(name = "idx_refresh_tokens_expires_at", columnList = "expires_at"),
                 @Index(name = "idx_refresh_tokens_revoked", columnList = "revoked")
@@ -49,6 +52,12 @@ public class RefreshToken extends BaseEntity {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "user_id", nullable = false, foreignKey = @ForeignKey(name = "fk_refresh_tokens_user"))
     private User user;
+
+    // ── Tenant association (null for platform-scoped sessions) ──────────
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "tenant_id", foreignKey = @ForeignKey(name = "fk_refresh_tokens_tenant"))
+    private Tenant tenant;
 
     // ── Token ───────────────────────────────────────────────────────────
 

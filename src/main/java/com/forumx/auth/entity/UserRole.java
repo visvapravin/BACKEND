@@ -11,7 +11,6 @@ import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
-import jakarta.persistence.UniqueConstraint;
 import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -28,32 +27,40 @@ import org.hibernate.annotations.DynamicUpdate;
  * Represents the assignment of a Role to a User.
  * Replaces the traditional Many-To-Many relationship to support auditing, expiration, and future extensibility.
  */
+import com.forumx.tenant.entity.Tenant;
+
 @Getter
 @Setter
 @SuperBuilder
 @NoArgsConstructor
 @AllArgsConstructor
 @EqualsAndHashCode(callSuper = true, onlyExplicitlyIncluded = true)
-@ToString(exclude = {"user", "role"})
+@ToString(exclude = {"user", "role", "tenant"})
 @DynamicInsert
 @DynamicUpdate
 @Entity
 @Table(
         name = "user_roles",
-        uniqueConstraints = {
-                @UniqueConstraint(
-                        name = "uk_user_roles_user_role",
-                        columnNames = {"user_id", "role_id"}
-                )
-        },
         indexes = {
                 @Index(
                         name = "idx_user_roles_user",
                         columnList = "user_id"
                 ),
                 @Index(
+                        name = "idx_user_roles_tenant",
+                        columnList = "tenant_id"
+                ),
+                @Index(
                         name = "idx_user_roles_role",
                         columnList = "role_id"
+                ),
+                @Index(
+                        name = "idx_user_roles_user_tenant",
+                        columnList = "user_id,tenant_id"
+                ),
+                @Index(
+                        name = "idx_user_roles_user_tenant_active",
+                        columnList = "user_id,tenant_id,active"
                 ),
                 @Index(
                         name = "idx_user_roles_active",
@@ -62,10 +69,6 @@ import org.hibernate.annotations.DynamicUpdate;
                 @Index(
                         name = "idx_user_roles_expires_at",
                         columnList = "expires_at"
-                ),
-                @Index(
-                        name = "idx_user_roles_user_active",
-                        columnList = "user_id,active"
                 )
         }
 )
@@ -78,6 +81,15 @@ public class UserRole extends BaseEntity {
             foreignKey = @ForeignKey(name = "fk_user_roles_user")
     )
     private User user;
+
+    /** Null only for global/platform-scoped roles such as PLATFORM_ADMIN. */
+    @ManyToOne(fetch = FetchType.LAZY, optional = true)
+    @JoinColumn(
+            name = "tenant_id",
+            nullable = true,
+            foreignKey = @ForeignKey(name = "fk_user_roles_tenant")
+    )
+    private Tenant tenant;
 
     @NotNull
     @ManyToOne(fetch = FetchType.LAZY, optional = false)

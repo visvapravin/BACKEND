@@ -18,6 +18,11 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.DisabledException;
+import org.springframework.security.authentication.LockedException;
+import org.springframework.security.authentication.AccountExpiredException;
+import org.springframework.security.authentication.CredentialsExpiredException;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -275,6 +280,31 @@ public class GlobalExceptionHandler {
         return ResponseEntity
                 .status(HttpStatus.UNAUTHORIZED)
                 .body(ApiResponse.error("Authentication failed", errorResponse, path));
+    }
+
+    /**
+     * Handles DisabledException, LockedException, etc. for account/tenant status failures.
+     */
+    @ExceptionHandler({DisabledException.class, LockedException.class, AccountExpiredException.class, CredentialsExpiredException.class})
+    public ResponseEntity<ApiResponse<ErrorResponse>> handleAccountStatusException(
+            AuthenticationException ex,
+            WebRequest request
+    ) {
+        String path = resolvePath(request);
+        String requestId = resolveRequestId(request);
+        log.warn(formatLogMessage(request, "Authentication failed - account/tenant status: " + ex.getMessage()));
+
+        ErrorResponse errorResponse = buildErrorResponse(
+                ErrorCode.ACCOUNT_DISABLED,
+                ex.getMessage(),
+                path,
+                requestId,
+                null
+        );
+
+        return ResponseEntity
+                .status(HttpStatus.UNAUTHORIZED)
+                .body(ApiResponse.error(ex.getMessage(), errorResponse, path));
     }
 
     /**

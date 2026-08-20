@@ -26,6 +26,7 @@ public class SearchServiceImpl implements SearchService {
 
     private final QuestionRepository questionRepository;
     private final UserRepository userRepository;
+    private final com.forumx.auth.repository.UserRoleRepository userRoleRepository;
     private final AuthenticationFacade authenticationFacade;
     private final TenantResolver tenantResolver;
 
@@ -71,7 +72,7 @@ public class SearchServiceImpl implements SearchService {
     private CurrentUser resolveCurrentUser() {
         Long tenantId = tenantResolver.resolveTenantId();
         CustomUserDetails details = authenticationFacade.getCurrentUserDetails();
-        if (tenantId == null || details == null) {
+        if (tenantId == null || details == null || details.getTenantId() == null) {
             throw new AccessDeniedException("Authenticated tenant context is required");
         }
         if (!tenantId.equals(details.getTenantId())) {
@@ -82,7 +83,7 @@ public class SearchServiceImpl implements SearchService {
         if (!user.isEnabled()) {
             throw new AccessDeniedException("User is disabled");
         }
-        if (user.getTenant() == null || !tenantId.equals(user.getTenant().getId())) {
+        if (!userRoleRepository.existsActiveMembership(user.getId(), tenantId)) {
             throw new AccessDeniedException("User does not belong to the current tenant");
         }
         return new CurrentUser(details.getUserId(), tenantId, user);

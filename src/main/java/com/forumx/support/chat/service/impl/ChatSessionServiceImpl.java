@@ -42,7 +42,12 @@ public class ChatSessionServiceImpl implements ChatSessionService {
     public ChatSession getOrCreateSession(Ticket ticket, Long tenantId) {
         return chatSessionRepository.findByTicket_IdAndTenant_IdAndDeletedFalse(ticket.getId(), tenantId)
                 .orElseGet(() -> {
-                    Tenant tenant = ticket.getTenant() != null ? ticket.getTenant() : (ticket.getCreator() != null ? ticket.getCreator().getTenant() : null);
+                    // ticket.getTenant() is always the authoritative tenant. Do NOT fall back to creator's home tenant.
+                    Tenant tenant = ticket.getTenant();
+                    if (tenant == null) {
+                        throw new IllegalStateException(
+                                "Ticket ID=" + ticket.getId() + " has no tenant assigned. Cannot create chat session.");
+                    }
                     ChatSession session = ChatSession.builder()
                             .ticket(ticket)
                             .tenant(tenant)
@@ -108,23 +113,18 @@ public class ChatSessionServiceImpl implements ChatSessionService {
         log.info("[DIAGNOSTIC] ChatSessionServiceImpl.joinRoom START - TicketId: {}, User: {}, UserId: {}, Role: {}",
                 ticketId, user.getUsername(), user.getId(), role);
 
-        if (role != ParticipantRole.CUSTOMER && !bypassOnlineCheck && !presenceService.isOnline(user.getId())) {
-            throw new IllegalStateException("User must be online to join support room");
-        }
+        // Derive tenantId from the ticket (authoritative source), NOT from user.getTenant()
+        Ticket ticket = ticketRepository.findById(ticketId)
+                .orElseThrow(() -> new EntityNotFoundException("Ticket not found with ID: " + ticketId));
 
-        Long tenantId = user.getTenant() != null ? user.getTenant().getId() : null;
+        Long tenantId = ticket.getTenant() != null ? ticket.getTenant().getId() : null;
         if (tenantId == null) {
-            throw new AccessDeniedException("User tenant context is required to join support room");
+            throw new AccessDeniedException("Ticket has no tenant context — cannot join support room");
         }
 
-        Ticket ticket = ticketRepository.findByIdAndTenant_IdAndDeletedFalse(ticketId, tenantId)
-                .orElseGet(() -> {
-                    Ticket existingOtherTenant = ticketRepository.findById(ticketId).orElse(null);
-                    if (existingOtherTenant != null) {
-                        throw new AccessDeniedException("User does not belong to ticket tenant");
-                    }
-                    throw new EntityNotFoundException("Ticket not found with ID: " + ticketId);
-                });
+        // Verify the ticket belongs to the expected tenant by re-loading with tenant scope
+        ticket = ticketRepository.findByIdAndTenant_IdAndDeletedFalse(ticketId, tenantId)
+                .orElseThrow(() -> new EntityNotFoundException("Ticket not found with ID: " + ticketId));
 
         ChatSession session = getOrCreateSession(ticket, tenantId);
 
@@ -148,7 +148,8 @@ public class ChatSessionServiceImpl implements ChatSessionService {
 
         // Record a distinct active participation window (joinedAt -> leftAt)
         Instant now = Instant.now();
-        Tenant effectiveTenant = session.getTenant() != null ? session.getTenant() : user.getTenant();
+        // effectiveTenant comes from the chat session (which was created from ticket.getTenant())
+        Tenant effectiveTenant = session.getTenant();
 
         SupportSessionParticipant participant = SupportSessionParticipant.builder()
                 .session(session)
@@ -227,7 +228,7 @@ public class ChatSessionServiceImpl implements ChatSessionService {
                         .joinedAt(p.getJoinedAt())
                         .leftAt(p.getLeftAt())
                         .isActive(p.isActive())
-                        .isOnline(presenceService.isOnline(p.getUser().getId()))
+                        .isOnline(presenceService.isUserOnlineInTenant(tenantId, p.getUser().getId()))
                         .build())
                 .toList();
     }

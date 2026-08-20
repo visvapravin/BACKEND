@@ -51,4 +51,21 @@ public interface ModeratorInvitationRepository extends JpaRepository<ModeratorIn
      * Used to enforce tenant isolation on single-invitation operations.
      */
     Optional<ModeratorInvitation> findByIdAndTenant_IdAndDeletedFalse(Long id, Long tenantId);
+
+    /**
+     * Bulk-revokes all PENDING moderator invitations for a tenant.
+     * Called during tenant deactivation so outstanding tokens cannot be accepted.
+     *
+     * @param tenantId the tenant whose pending invitations to revoke
+     */
+    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true, flushAutomatically = true)
+    @org.springframework.data.jpa.repository.Query("""
+            UPDATE ModeratorInvitation i
+            SET i.status = com.forumx.auth.invitation.entity.InvitationStatus.REVOKED
+            WHERE i.tenant.id = :tenantId
+              AND i.status = com.forumx.auth.invitation.entity.InvitationStatus.PENDING
+              AND i.deleted = false
+            """)
+    void revokeAllPendingByTenantId(@org.springframework.data.repository.query.Param("tenantId") Long tenantId);
 }
+

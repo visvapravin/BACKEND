@@ -1,16 +1,32 @@
 package com.forumx.auth.service;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.Base64;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
+import com.forumx.auth.dto.request.ForgotPasswordRequest;
+import com.forumx.auth.dto.request.GoogleLoginRequest;
 import com.forumx.auth.dto.request.LoginRequest;
 import com.forumx.auth.dto.request.LogoutRequest;
 import com.forumx.auth.dto.request.RefreshTokenRequest;
 import com.forumx.auth.dto.request.RegisterRequest;
+import com.forumx.auth.dto.request.ResendVerificationRequest;
+import com.forumx.auth.dto.request.ResetPasswordRequest;
 import com.forumx.auth.dto.response.CurrentUserResponse;
 import com.forumx.auth.dto.response.LoginResponse;
 import com.forumx.auth.dto.response.RefreshTokenResponse;
 import com.forumx.auth.dto.response.RegisterResponse;
+import com.forumx.auth.dto.response.TenantMembershipResponse;
 import com.forumx.auth.entity.RefreshToken;
 import com.forumx.auth.entity.Role;
 import com.forumx.auth.entity.User;
@@ -18,41 +34,32 @@ import com.forumx.auth.entity.UserProfile;
 import com.forumx.auth.entity.UserRole;
 import com.forumx.auth.enums.RoleType;
 import com.forumx.auth.mapper.AuthMapper;
+import com.forumx.auth.passwordreset.entity.PasswordResetToken;
+import com.forumx.auth.passwordreset.repository.PasswordResetTokenRepository;
 import com.forumx.auth.repository.RefreshTokenRepository;
 import com.forumx.auth.repository.RoleRepository;
 import com.forumx.auth.repository.UserProfileRepository;
 import com.forumx.auth.repository.UserRepository;
 import com.forumx.auth.repository.UserRoleRepository;
+import com.forumx.auth.verification.entity.VerificationToken;
+import com.forumx.auth.verification.repository.VerificationTokenRepository;
+import com.forumx.common.exception.PasswordMismatchException;
+import com.forumx.common.exception.PasswordNotSetException;
+import com.forumx.common.exception.PasswordReuseException;
+import com.forumx.common.exception.UsernameAlreadyExistsException;
+import com.forumx.mail.EmailService;
+import com.forumx.notification.dto.NotificationEvent;
+import com.forumx.notification.publisher.NotificationPublisher;
+import com.forumx.security.facade.AuthenticationFacade;
 import com.forumx.security.jwt.JwtTokenProvider;
 import com.forumx.security.model.CustomUserDetails;
 import com.forumx.tenant.entity.Tenant;
 import com.forumx.tenant.repository.TenantRepository;
-import com.forumx.auth.dto.request.ResendVerificationRequest;
-import com.forumx.auth.verification.entity.VerificationToken;
-import com.forumx.auth.verification.repository.VerificationTokenRepository;
-import com.forumx.mail.EmailService;
 import com.forumx.tenant.resolver.TenantResolver;
-import com.forumx.auth.dto.request.ForgotPasswordRequest;
-import com.forumx.auth.dto.request.ResetPasswordRequest;
-import com.forumx.auth.passwordreset.entity.PasswordResetToken;
-import com.forumx.auth.passwordreset.repository.PasswordResetTokenRepository;
-import com.forumx.common.exception.PasswordMismatchException;
-import com.forumx.common.exception.PasswordReuseException;
-import com.forumx.common.exception.PasswordNotSetException;
-import com.forumx.common.exception.UsernameAlreadyExistsException;
-import com.forumx.auth.dto.request.GoogleLoginRequest;
-import org.springframework.web.util.UriComponentsBuilder;
-import org.springframework.beans.factory.annotation.Value;
-import java.time.Duration;
-import java.time.Instant;
-import java.security.SecureRandom;
-import java.security.MessageDigest;
-import java.nio.charset.StandardCharsets;
-import java.security.NoSuchAlgorithmException;
-import java.util.Base64;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.DisabledException;
@@ -64,6 +71,7 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.util.UriComponentsBuilder;
 
 /**
  * Service providing authentication and registration core flows for the multi-tenant ForumX backend.
@@ -88,8 +96,8 @@ public class AuthenticationService {
     private final TenantResolver tenantResolver;
     private final PasswordResetTokenRepository passwordResetTokenRepository;
     private final GoogleTokenVerifierService googleTokenVerifierService;
-    private final com.forumx.notification.publisher.NotificationPublisher notificationPublisher;
-    private final AccountScopeValidator accountScopeValidator;
+    private final NotificationPublisher notificationPublisher;
+    private final AuthenticationFacade authenticationFacade;
 
     @Value("${app.frontend.base-url}")
     private String frontendBaseUrl;
@@ -117,66 +125,62 @@ public class AuthenticationService {
         log.debug("Validation details: checking registration request for tenantSlug={}, username={}", request.getTenantSlug(), request.getUsername());
         Tenant tenant = validateTenant(request.getTenantSlug());
 
-        if (userRepository.existsByTenantIdAndUsername(tenant.getId(), request.getUsername())) {
-            log.warn("Username already exists in tenant: {}", request.getUsername());
-            throw new UsernameAlreadyExistsException("Username already exists");
-        }
-        if (userRepository.existsByEmail(request.getEmail())) {
-            log.warn("Email already exists: {}", request.getEmail());
-            throw new IllegalArgumentException("Email already exists");
-        }
-
         validatePasswords(request.getPassword(), request.getConfirmPassword());
 
-        String hashedPassword = passwordEncoder.encode(request.getPassword());
-        User user = createUser(request, tenant, hashedPassword);
-        userRepository.saveAndFlush(user);
+        Optional<User> existingUserOpt = userRepository.findByEmailAndDeletedFalse(request.getEmail());
 
-        createUserProfile(user);
-        assignDefaultRole(user);
+        if (existingUserOpt.isPresent()) {
+            User existingUser = existingUserOpt.get();
 
-        // Generate verification token
-        String rawToken = generateRawToken();
-        String tokenHash = hashToken(rawToken);
+            if (userRoleRepository.existsActiveMembership(existingUser.getId(), tenant.getId())) {
+                log.warn("User {} is already an active member in tenant {}", existingUser.getId(), tenant.getSlug());
+                throw new IllegalArgumentException("User is already registered with this workspace");
+            }
 
-        VerificationToken verificationToken = VerificationToken.builder()
-                .user(user)
-                .tokenHash(tokenHash)
-                .expiresAt(Instant.now().plus(tokenExpiration))
-                .used(false)
-                .build();
-        verificationTokenRepository.save(verificationToken);
+            if (existingUser.getPasswordHash() != null) {
+                if (!passwordEncoder.matches(request.getPassword(), existingUser.getPasswordHash())) {
+                    throw new BadCredentialsException("Invalid password for existing account");
+                }
+            } else {
+                existingUser.setPasswordHash(passwordEncoder.encode(request.getPassword()));
+                userRepository.save(existingUser);
+            }
 
-        String verificationUrl = UriComponentsBuilder.fromHttpUrl(frontendBaseUrl)
-                .path(verificationPath)
-                .queryParam("token", rawToken)
-                .build()
-                .toUriString();
-        String message = "Registration successful. Please verify your email.";
+            assignDefaultRole(existingUser, tenant);
 
-        try {
-            com.forumx.notification.dto.NotificationEvent notificationEvent = new com.forumx.notification.dto.NotificationEvent(
-                    java.util.UUID.randomUUID(),
-                    tenant.getId(),
-                    user.getId(),
-                    user.getEmail(),
-                    user.getUsername(),
-                    verificationUrl,
-                    "REGISTRATION_VERIFICATION",
-                    java.time.Instant.now()
-            );
-            notificationPublisher.publish(notificationEvent);
-        } catch (Exception e) {
-            log.error("Failed to publish verification email during registration for username={}", user.getUsername(), e);
-            message = "Registration successful, but verification email delivery failed. Please request a new verification email.";
+            String message;
+            if (existingUser.isEmailVerified()) {
+                message = "Successfully joined workspace. You can now log in.";
+            } else {
+                message = sendVerificationEmail(existingUser, tenant);
+            }
+
+            log.info("Existing user joined tenant: username={}, tenant={}", existingUser.getUsername(), tenant.getSlug());
+            return buildRegisterResponse(existingUser, tenant, message);
+
+        } else {
+            String chosenUsername = request.getUsername().trim();
+            if (userRepository.findByUsernameAndDeletedFalse(chosenUsername).isPresent()) {
+                log.warn("Username already exists globally: {}", chosenUsername);
+                throw new UsernameAlreadyExistsException("Username already exists");
+            }
+
+            String hashedPassword = passwordEncoder.encode(request.getPassword());
+            User user = createUser(request, hashedPassword);
+            userRepository.saveAndFlush(user);
+
+            createUserProfile(user);
+            assignDefaultRole(user, tenant);
+
+            String message = sendVerificationEmail(user, tenant);
+
+            log.info("Successful registration of new user: username={}, tenant={}", user.getUsername(), tenant.getSlug());
+            return buildRegisterResponse(user, tenant, message);
         }
-
-        log.info("Successful registration: username={}, tenant={}", user.getUsername(), tenant.getSlug());
-        return buildRegisterResponse(user, message);
     }
 
     /**
-     * Authenticates a user's credentials and issues tokens.
+     * Authenticates a user within a tenant and issues JWT access and refresh tokens.
      *
      * @param request        the login credentials
      * @param servletRequest the HTTP servlet request containing client metadata
@@ -186,9 +190,18 @@ public class AuthenticationService {
     public LoginResponse login(LoginRequest request, HttpServletRequest servletRequest) {
         log.debug("Validation details: authenticating usernameOrEmail={}", request.getUsernameOrEmail());
 
-        Long tenantId = tenantResolver.resolveTenantId();
-        User checkUser = userRepository.findByTenantIdAndUsernameAndDeletedFalse(tenantId, request.getUsernameOrEmail())
-                .or(() -> userRepository.findByTenantIdAndEmailAndDeletedFalse(tenantId, request.getUsernameOrEmail()))
+        String requestedSlug = (request.getTenantSlug() != null && !request.getTenantSlug().isBlank())
+                ? request.getTenantSlug().trim()
+                : null;
+
+        Tenant tenant = requestedSlug != null
+                ? tenantRepository.findBySlugAndDeletedFalse(requestedSlug)
+                        .orElseThrow(() -> new DisabledException("Tenant not found or inactive: " + requestedSlug))
+                : tenantRepository.findByIdAndDeletedFalse(tenantResolver.resolveTenantId())
+                        .orElseThrow(() -> new DisabledException("Tenant not found or inactive"));
+        validateTenant(tenant);
+
+        User checkUser = userRepository.findForAuthenticationByTenantIdAndUsernameOrEmail(tenant.getId(), request.getUsernameOrEmail())
                 .orElseThrow(() -> new BadCredentialsException("Invalid credentials"));
 
         if (checkUser.getPasswordHash() == null) {
@@ -203,20 +216,25 @@ public class AuthenticationService {
         User user = userDetails.getUser();
 
         validateUserStatus(user);
-        validateTenant(user.getTenant());
 
         if (!user.isEmailVerified()) {
             throw new com.forumx.common.exception.EmailNotVerifiedException("Please verify your email before logging in.");
         }
 
-        String accessToken = issueAccessToken(user);
+        List<UserRole> activeRoles = userRoleRepository.findActiveRolesByUserIdAndTenantId(user.getId(), tenant.getId());
+        if (activeRoles.isEmpty()) {
+            log.warn("Login denied: User {} has no active role membership in tenant {}", user.getId(), tenant.getId());
+            throw new BadCredentialsException("User does not have active membership in the requested workspace");
+        }
+
+        String accessToken = issueAccessToken(user, tenant.getId(), tenant.getSlug());
         String refreshToken = issueRefreshToken();
 
         ClientMetadata metadata = extractClientMetadata(servletRequest);
-        persistRefreshToken(user, refreshToken, metadata);
+        persistRefreshToken(user, tenant, refreshToken, metadata);
 
-        log.info("Successful login: username={}, tenant={}", user.getUsername(), user.getTenant().getSlug());
-        return buildLoginResponse(user, accessToken, refreshToken);
+        log.info("Successful login: username={}, tenant={}", user.getUsername(), tenant.getSlug());
+        return buildLoginResponse(user, tenant, accessToken, refreshToken);
     }
 
     /**
@@ -230,7 +248,6 @@ public class AuthenticationService {
     public LoginResponse googleLogin(GoogleLoginRequest request, HttpServletRequest servletRequest) {
         log.debug("Validation details: google login for tenantSlug={}", request.getTenantSlug());
 
-        // Step 1: Verify Google ID Token
         GoogleTokenVerifierService.GoogleClaims claims = googleTokenVerifierService.verify(request.getIdToken());
         String googleSub = claims.googleSub();
         String email = claims.email();
@@ -238,24 +255,21 @@ public class AuthenticationService {
         Tenant tenant = validateTenant(request.getTenantSlug());
         User user;
 
-        // Step 2: Find user by google_id globally
         java.util.Optional<User> userByGoogleId = userRepository.findByGoogleIdAndDeletedFalse(googleSub);
         if (userByGoogleId.isPresent()) {
             User existingUser = userByGoogleId.get();
-            // Validate that it belongs to the current tenant and email to prevent hijacking / cross-tenant linking
-            if (!existingUser.getTenant().getId().equals(tenant.getId()) || !existingUser.getEmail().equals(email)) {
-                log.error("SECURITY EVENT: Google ID {} is already linked to user {} (tenant {}) but login requested for tenant {} and email {}",
-                        googleSub, existingUser.getEmail(), existingUser.getTenant().getSlug(), tenant.getSlug(), email);
+            if (!existingUser.getEmail().equals(email)) {
+                log.error("SECURITY EVENT: Google ID {} is already linked to user {} but login requested for email {}",
+                        googleSub, existingUser.getEmail(), email);
                 throw new BadCredentialsException("Google account is already linked to another account");
             }
             user = existingUser;
+            assignDefaultRole(user, tenant);
         } else {
-            // Step 3: Find user by tenant and verified email
-            java.util.Optional<User> userOpt = userRepository.findByTenantIdAndEmailAndDeletedFalse(tenant.getId(), email);
+            java.util.Optional<User> userOpt = userRepository.findByEmailAndDeletedFalse(email);
             if (userOpt.isPresent()) {
                 user = userOpt.get();
                 if (user.getGoogleId() == null) {
-                    // Link Google account
                     user.setGoogleId(googleSub);
                     if (user.getUserProfile() != null && (user.getUserProfile().getAvatarUrl() == null || user.getUserProfile().getAvatarUrl().isEmpty())) {
                         user.getUserProfile().setAvatarUrl(claims.pictureUrl());
@@ -263,58 +277,54 @@ public class AuthenticationService {
                     }
                     userRepository.save(user);
                 } else {
-                    // Stored googleId is not null, and doesn't match the sub (since findByGoogleId didn't find it). Reject relinking.
                     log.error("SECURITY EVENT: Google ID mismatch for email {}. Stored Google ID: {}, Verified Google ID: {}",
                             user.getEmail(), user.getGoogleId(), googleSub);
                     throw new BadCredentialsException("Google account mismatch");
                 }
+                assignDefaultRole(user, tenant);
             } else {
-                // Step 4: Create new User
-                // Ensure unique username in the tenant
                 String baseUsername = email.split("@")[0];
                 String username = baseUsername;
                 int count = 1;
-                while (userRepository.existsByTenantIdAndUsername(tenant.getId(), username)) {
+                while (userRepository.findByUsernameAndDeletedFalse(username).isPresent()) {
                     username = baseUsername + count;
                     count++;
                 }
 
                 user = User.builder()
-                        .tenant(tenant)
+                        .tenant(null)
                         .username(username)
                         .email(email)
-                        .passwordHash(null) // passwordHash = null
-                        .emailVerified(true) // emailVerified = true
-                        .googleId(googleSub) // googleId = googleSub
+                        .passwordHash(null)
+                        .emailVerified(true)
+                        .googleId(googleSub)
                         .status(User.UserStatus.ACTIVE)
                         .enabled(true)
                         .build();
                 userRepository.saveAndFlush(user);
 
-                // Create UserProfile
                 UserProfile profile = createUserProfile(user);
                 user.setUserProfile(profile);
-                // Populate profile picture if provided
                 if (claims.pictureUrl() != null) {
                     profile.setAvatarUrl(claims.pictureUrl());
                     userProfileRepository.save(profile);
                 }
 
-                assignDefaultRole(user);
+                assignDefaultRole(user, tenant);
             }
         }
 
         validateUserStatus(user);
-        validateTenant(user.getTenant());
+        validateTenant(tenant);
 
-        String accessToken = issueAccessToken(user);
+        String accessToken = issueAccessToken(user, tenant.getId(), tenant.getSlug());
         String refreshToken = issueRefreshToken();
 
         ClientMetadata metadata = extractClientMetadata(servletRequest);
-        persistRefreshToken(user, refreshToken, metadata);
+        persistRefreshToken(user, tenant, refreshToken, metadata);
 
-        log.info("Successful Google login: username={}, tenant={}", user.getUsername(), user.getTenant().getSlug());
-        return buildLoginResponse(user, accessToken, refreshToken);
+        log.info("Successful Google login: username={}, tenant={}", user.getUsername(), tenant.getSlug());
+        return buildLoginResponse(user, tenant, accessToken, refreshToken);
     }
 
     /**
@@ -343,17 +353,40 @@ public class AuthenticationService {
 
         User user = refreshToken.getUser();
         validateUserStatus(user);
-        validateTenant(user.getTenant());
 
-        String newAccessToken = issueAccessToken(user);
+        Tenant tenant = refreshToken.getTenant();
+        if (tenant != null) {
+            validateTenant(tenant);
+            List<UserRole> activeRoles = userRoleRepository.findActiveRolesByUserIdAndTenantId(user.getId(), tenant.getId());
+            if (activeRoles.isEmpty()) {
+                log.warn("Refresh token rejected: user {} no longer has active membership in tenant {}", user.getId(), tenant.getId());
+                throw new BadCredentialsException("User no longer has active membership in this tenant");
+            }
 
-        log.info("Successful token refresh: username={}", user.getUsername());
-        return RefreshTokenResponse.builder()
-                .accessToken(newAccessToken)
-                .refreshToken(refreshToken.getToken())
-                .tokenType("Bearer")
-                .expiresAt(jwtTokenProvider.extractExpiration(newAccessToken).toInstant())
-                .build();
+            String newAccessToken = issueAccessToken(user, tenant.getId(), tenant.getSlug());
+            log.info("Successful tenant token refresh: username={}, tenant={}", user.getUsername(), tenant.getSlug());
+            return RefreshTokenResponse.builder()
+                    .accessToken(newAccessToken)
+                    .refreshToken(refreshToken.getToken())
+                    .tokenType("Bearer")
+                    .expiresAt(jwtTokenProvider.extractExpiration(newAccessToken).toInstant())
+                    .build();
+        } else {
+            List<UserRole> platformRoles = userRoleRepository.findActivePlatformRolesByUserId(user.getId());
+            if (platformRoles.isEmpty()) {
+                log.warn("Refresh token rejected: user {} does not hold platform administrator privileges", user.getId());
+                throw new BadCredentialsException("User does not hold active platform privileges");
+            }
+
+            String newAccessToken = issueAccessToken(user, null, null);
+            log.info("Successful platform token refresh: username={}", user.getUsername());
+            return RefreshTokenResponse.builder()
+                    .accessToken(newAccessToken)
+                    .refreshToken(refreshToken.getToken())
+                    .tokenType("Bearer")
+                    .expiresAt(jwtTokenProvider.extractExpiration(newAccessToken).toInstant())
+                    .build();
+        }
     }
 
     /**
@@ -384,7 +417,15 @@ public class AuthenticationService {
                     return new IllegalArgumentException("User not found");
                 });
 
-        CustomUserDetails userDetails = new CustomUserDetails(user);
+        CustomUserDetails currentDetails = authenticationFacade.getCurrentUserDetails();
+        Long tenantId = currentDetails != null ? currentDetails.getTenantId() : null;
+        String tenantSlug = currentDetails != null ? currentDetails.getTenantSlug() : null;
+
+        List<UserRole> activeRoles = tenantId != null
+                ? userRoleRepository.findActiveRolesByUserIdAndTenantId(userId, tenantId)
+                : userRoleRepository.findActivePlatformRolesByUserId(userId);
+
+        CustomUserDetails userDetails = new CustomUserDetails(user, tenantId, tenantSlug, activeRoles);
         List<String> roles = userDetails.getAuthorities().stream()
                 .map(GrantedAuthority::getAuthority)
                 .filter(auth -> auth.startsWith("ROLE_"))
@@ -400,9 +441,8 @@ public class AuthenticationService {
                 .userId(user.getId())
                 .username(user.getUsername())
                 .email(user.getEmail())
-                // Platform Admin has no tenant — safely return null for tenant fields
-                .tenantId(user.getTenant() != null ? user.getTenant().getId() : null)
-                .tenantSlug(user.getTenant() != null ? user.getTenant().getSlug() : null)
+                .tenantId(tenantId)
+                .tenantSlug(tenantSlug)
                 .active(user.getStatus() == User.UserStatus.ACTIVE)
                 .enabled(user.isEnabled())
                 .accountNonLocked(!user.isAccountLocked())
@@ -411,6 +451,38 @@ public class AuthenticationService {
                 .roles(roles)
                 .permissions(permissions)
                 .build();
+    }
+
+    /**
+     * Retrieves all active tenant memberships for the specified user.
+     *
+     * @param userId the authenticated user ID
+     * @return list of active tenant memberships with roles
+     */
+    @Transactional(readOnly = true)
+    public List<TenantMembershipResponse> getUserMemberships(Long userId) {
+        List<UserRole> memberships = userRoleRepository.findActiveTenantMembershipsByUserId(userId);
+        Map<Tenant, List<String>> tenantRolesMap = memberships.stream()
+                .filter(ur -> ur.getTenant() != null && ur.getRole() != null)
+                .collect(Collectors.groupingBy(
+                        UserRole::getTenant,
+                        Collectors.mapping(ur -> ur.getRole().getRoleName().name(), Collectors.toList())
+                ));
+
+        return tenantRolesMap.entrySet().stream()
+                .map(entry -> {
+                    Tenant tenant = entry.getKey();
+                    List<String> roles = entry.getValue().stream().distinct().toList();
+                    return TenantMembershipResponse.builder()
+                            .tenantId(tenant.getId())
+                            .tenantSlug(tenant.getSlug())
+                            .tenantName(tenant.getName())
+                            .roles(roles)
+                            .active(tenant.getStatus() == Tenant.TenantStatus.ACTIVE && !tenant.isDeleted())
+                            .build();
+                })
+                .sorted(Comparator.comparing(TenantMembershipResponse::getTenantName))
+                .toList();
     }
 
     /**
@@ -481,10 +553,9 @@ public class AuthenticationService {
      * @param hashedPassword the hashed password
      * @return the configured User entity
      */
-    private User createUser(RegisterRequest request, Tenant tenant, String hashedPassword) {
-        accountScopeValidator.validate(RoleType.USER, tenant);
+    private User createUser(RegisterRequest request, String hashedPassword) {
         User user = authMapper.toUser(request);
-        user.setTenant(tenant);
+        user.setTenant(null);
         user.setPasswordHash(hashedPassword);
         user.setStatus(User.UserStatus.ACTIVE);
         user.setEnabled(true);
@@ -499,36 +570,53 @@ public class AuthenticationService {
     }
 
     /**
-     * Assigns the default ROLE_USER to the specified user.
+     * Assigns the default ROLE_USER to the specified user within a tenant.
+     * Reactivates if an existing inactive assignment exists.
      *
-     * <p>Public registration always and only assigns ROLE_USER.
-     * Elevated roles (MODERATOR, TENANT_ADMIN, PLATFORM_ADMIN) are exclusively
-     * granted through dedicated invitation flows and the platform bootstrap process.
-     * No username pattern or any other heuristic may bypass this rule.
-     *
-     * @param user the target User
+     * @param user   the target User
+     * @param tenant the target Tenant
      */
-    private void assignDefaultRole(User user) {
+    private void assignDefaultRole(User user, Tenant tenant) {
         Role role = roleRepository.findByRoleName(RoleType.USER)
                 .orElseThrow(() -> new IllegalArgumentException("Default Role USER not found in database. Ensure Flyway migrations have run."));
 
+        if (tenant != null) {
+            Optional<UserRole> existingRoleOpt = userRoleRepository.findByUserIdAndTenantIdAndRoleId(user.getId(), tenant.getId(), role.getId());
+            if (existingRoleOpt.isPresent()) {
+                UserRole existingRole = existingRoleOpt.get();
+                if (!existingRole.isActiveAssignment()) {
+                    existingRole.activate();
+                    userRoleRepository.save(existingRole);
+                }
+                return;
+            }
+        }
+
         UserRole userRole = UserRole.builder()
                 .user(user)
+                .tenant(tenant)
                 .role(role)
                 .active(true)
                 .build();
         userRoleRepository.save(userRole);
-        user.getUserRoles().add(userRole);
+        if (user.getUserRoles() != null) {
+            user.getUserRoles().add(userRole);
+        }
     }
 
     /**
-     * Generates a new access token for the user.
+     * Generates a new access token for the user within a tenant context.
      *
-     * @param user the User entity
+     * @param user       the User entity
+     * @param tenantId   the active tenant ID
+     * @param tenantSlug the active tenant slug
      * @return access token JWT string
      */
-    private String issueAccessToken(User user) {
-        UserDetails userDetails = new CustomUserDetails(user);
+    private String issueAccessToken(User user, Long tenantId, String tenantSlug) {
+        List<UserRole> activeRoles = tenantId != null
+                ? userRoleRepository.findActiveRolesByUserIdAndTenantId(user.getId(), tenantId)
+                : userRoleRepository.findActivePlatformRolesByUserId(user.getId());
+        UserDetails userDetails = new CustomUserDetails(user, tenantId, tenantSlug, activeRoles);
         return jwtTokenProvider.generateAccessToken(userDetails);
     }
 
@@ -548,9 +636,10 @@ public class AuthenticationService {
      * @param tokenString the refresh token string
      * @param metadata    the client HTTP details
      */
-    private void persistRefreshToken(User user, String tokenString, ClientMetadata metadata) {
+    private void persistRefreshToken(User user, Tenant tenant, String tokenString, ClientMetadata metadata) {
         RefreshToken refreshToken = RefreshToken.builder()
                 .user(user)
+                .tenant(tenant)
                 .token(tokenString)
                 .ipAddress(metadata.ipAddress())
                 .userAgent(metadata.userAgent())
@@ -600,18 +689,25 @@ public class AuthenticationService {
      * Builds the LoginResponse payload from the user and token details.
      *
      * @param user         the authenticated user
+     * @param tenant       the active tenant
      * @param accessToken  the access token JWT
      * @param refreshToken the refresh token UUID
      * @return populated LoginResponse DTO
      */
-    private LoginResponse buildLoginResponse(User user, String accessToken, String refreshToken) {
+    private LoginResponse buildLoginResponse(User user, Tenant tenant, String accessToken, String refreshToken) {
         LoginResponse response = authMapper.toLoginResponse(user);
         response.setAccessToken(accessToken);
         response.setRefreshToken(refreshToken);
         response.setTokenType("Bearer");
         response.setExpiresAt(jwtTokenProvider.extractExpiration(accessToken).toInstant());
 
-        CustomUserDetails userDetails = new CustomUserDetails(user);
+        List<UserRole> activeRoles = tenant != null
+                ? userRoleRepository.findActiveRolesByUserIdAndTenantId(user.getId(), tenant.getId())
+                : userRoleRepository.findActiveRolesByUserId(user.getId());
+
+        CustomUserDetails userDetails = new CustomUserDetails(user, tenant != null ? tenant.getId() : null,
+                tenant != null ? tenant.getSlug() : null, activeRoles);
+
         List<String> roles = userDetails.getAuthorities().stream()
                 .map(GrantedAuthority::getAuthority)
                 .filter(auth -> auth.startsWith("ROLE_"))
@@ -625,22 +721,66 @@ public class AuthenticationService {
 
         response.setRoles(roles);
         response.setPermissions(permissions);
+        if (tenant != null) {
+            response.setTenantId(tenant.getId());
+            response.setTenantSlug(tenant.getSlug());
+        }
+        response.setScope("TENANT");
         return response;
+    }
+
+    private String sendVerificationEmail(User user, Tenant tenant) {
+        String rawToken = generateRawToken();
+        String tokenHash = hashToken(rawToken);
+
+        VerificationToken verificationToken = VerificationToken.builder()
+                .user(user)
+                .tokenHash(tokenHash)
+                .expiresAt(Instant.now().plus(tokenExpiration))
+                .used(false)
+                .build();
+        verificationTokenRepository.save(verificationToken);
+
+        String verificationUrl = UriComponentsBuilder.fromHttpUrl(frontendBaseUrl)
+                .path(verificationPath)
+                .queryParam("token", rawToken)
+                .build()
+                .toUriString();
+        String message = "Registration successful. Please verify your email.";
+
+        try {
+            com.forumx.notification.dto.NotificationEvent notificationEvent = new com.forumx.notification.dto.NotificationEvent(
+                    java.util.UUID.randomUUID(),
+                    tenant.getId(),
+                    user.getId(),
+                    user.getEmail(),
+                    user.getUsername(),
+                    verificationUrl,
+                    "REGISTRATION_VERIFICATION",
+                    java.time.Instant.now()
+            );
+            notificationPublisher.publish(notificationEvent);
+        } catch (Exception e) {
+            log.error("Failed to publish verification email during registration for username={}", user.getUsername(), e);
+            message = "Registration successful, but verification email delivery failed. Please request a new verification email.";
+        }
+        return message;
     }
 
     /**
      * Builds the RegisterResponse payload.
      *
      * @param user    the registered user
+     * @param tenant  the target tenant
      * @param message registration success message
      * @return populated RegisterResponse DTO
      */
-    private RegisterResponse buildRegisterResponse(User user, String message) {
+    private RegisterResponse buildRegisterResponse(User user, Tenant tenant, String message) {
         return RegisterResponse.builder()
                 .userId(user.getId())
                 .username(user.getUsername())
                 .email(user.getEmail())
-                .tenantId(user.getTenant().getId())
+                .tenantId(tenant.getId())
                 .message(message)
                 .build();
     }

@@ -1,14 +1,5 @@
 package com.forumx.platform.invitation.service.impl;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.security.SecureRandom;
-import java.time.Duration;
-import java.time.Instant;
-import java.util.Base64;
-import java.util.UUID;
-
 import com.forumx.auth.entity.Role;
 import com.forumx.auth.entity.User;
 import com.forumx.auth.entity.UserProfile;
@@ -20,20 +11,11 @@ import com.forumx.auth.repository.UserProfileRepository;
 import com.forumx.auth.repository.UserRepository;
 import com.forumx.auth.repository.UserRoleRepository;
 import com.forumx.auth.service.AccountScopeValidator;
-import com.forumx.common.exception.InvitationAlreadyAcceptedException;
-import com.forumx.common.exception.InvitationAlreadyPendingException;
-import com.forumx.common.exception.InvitationAlreadyRevokedException;
-import com.forumx.common.exception.InvitationNotFoundException;
-import com.forumx.common.exception.PasswordMismatchException;
-import com.forumx.common.exception.UsernameAlreadyExistsException;
+import com.forumx.common.exception.*;
 import com.forumx.notification.dto.NotificationEvent;
 import com.forumx.notification.email.EmailTemplateType;
 import com.forumx.notification.publisher.NotificationPublisher;
-import com.forumx.platform.invitation.dto.AcceptTenantAdminInvitationRequest;
-import com.forumx.platform.invitation.dto.AcceptTenantAdminInvitationResponse;
-import com.forumx.platform.invitation.dto.CreateTenantAdminInvitationRequest;
-import com.forumx.platform.invitation.dto.TenantAdminInvitationResponse;
-import com.forumx.platform.invitation.dto.ValidateTenantAdminInvitationResponse;
+import com.forumx.platform.invitation.dto.*;
 import com.forumx.platform.invitation.entity.TenantAdminInvitation;
 import com.forumx.platform.invitation.repository.TenantAdminInvitationRepository;
 import com.forumx.platform.invitation.service.TenantAdminInvitationService;
@@ -41,7 +23,6 @@ import com.forumx.security.facade.AuthenticationFacade;
 import com.forumx.security.model.CustomUserDetails;
 import com.forumx.tenant.entity.Tenant;
 import com.forumx.tenant.repository.TenantRepository;
-import jakarta.persistence.EntityNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -50,6 +31,16 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.util.UriComponentsBuilder;
+
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.Base64;
+import java.util.Optional;
+import java.util.UUID;
 
 @Slf4j
 @Service
@@ -61,15 +52,15 @@ public class TenantAdminInvitationServiceImpl implements TenantAdminInvitationSe
     private final TenantAdminInvitationRepository invitationRepository;
     private final TenantRepository tenantRepository;
     private final UserRepository userRepository;
+    private final UserProfileRepository userProfileRepository;
     private final RoleRepository roleRepository;
     private final UserRoleRepository userRoleRepository;
-    private final UserProfileRepository userProfileRepository;
     private final PasswordEncoder passwordEncoder;
-    private final AuthenticationFacade authenticationFacade;
-    private final AccountScopeValidator accountScopeValidator;
     private final NotificationPublisher notificationPublisher;
+    private final AccountScopeValidator accountScopeValidator;
+    private final AuthenticationFacade authenticationFacade;
 
-    @Value("${app.frontend.base-url}")
+    @Value("${forumx.frontend.base-url:http://localhost:3000}")
     private String frontendBaseUrl;
 
     // -- Create Invitation --
@@ -83,10 +74,10 @@ public class TenantAdminInvitationServiceImpl implements TenantAdminInvitationSe
         }
 
         Tenant tenant = tenantRepository.findByIdAndDeletedFalse(tenantId)
-                .orElseThrow(() -> new EntityNotFoundException("Tenant not found with ID: " + tenantId));
+                .orElseThrow(() -> new IllegalArgumentException("Tenant not found with ID: " + tenantId));
 
         User inviter = userRepository.findByIdAndDeletedFalse(details.getUserId())
-                .orElseThrow(() -> new EntityNotFoundException("Inviter user not found with ID: " + details.getUserId()));
+                .orElseThrow(() -> new IllegalArgumentException("Inviter user not found with ID: " + details.getUserId()));
 
         String normalizedEmail = request.getEmail().trim().toLowerCase();
 
@@ -150,10 +141,6 @@ public class TenantAdminInvitationServiceImpl implements TenantAdminInvitationSe
             AcceptTenantAdminInvitationRequest request,
             HttpServletRequest servletRequest) {
 
-        if (request.getPassword() == null || !request.getPassword().equals(request.getConfirmPassword())) {
-            throw new PasswordMismatchException("Passwords do not match");
-        }
-
         String tokenHash = hashToken(request.getToken());
         TenantAdminInvitation invitation = invitationRepository.findByTokenHashAndDeletedFalse(tokenHash)
                 .orElseThrow(() -> new InvitationNotFoundException("Invalid or missing invitation token"));
@@ -167,7 +154,7 @@ public class TenantAdminInvitationServiceImpl implements TenantAdminInvitationSe
         if (invitation.isExpired()) {
             invitation.setStatus(InvitationStatus.EXPIRED);
             invitationRepository.save(invitation);
-            throw new IllegalArgumentException("Invitation token has expired");
+            throw new ExpiredTokenException("Invitation token has expired");
         }
 
         Tenant tenant = invitation.getTenant();
@@ -175,54 +162,104 @@ public class TenantAdminInvitationServiceImpl implements TenantAdminInvitationSe
 
         accountScopeValidator.validate(roleType, tenant);
 
-        if (userRepository.existsByTenantIdAndUsername(tenant.getId(), request.getUsername().trim())) {
-            throw new UsernameAlreadyExistsException("Username already exists in tenant");
-        }
-        if (userRepository.existsByEmail(invitation.getEmail())) {
-            throw new IllegalArgumentException("Email is already registered");
-        }
-
         Role tenantAdminRole = roleRepository.findByRoleName(roleType)
                 .orElseThrow(() -> new IllegalStateException(
                         "TENANT_ADMIN role not found in database. Ensure Flyway migrations have run."));
 
-        User user = User.builder()
-                .tenant(tenant)
-                .username(request.getUsername().trim())
-                .email(invitation.getEmail())
-                .passwordHash(passwordEncoder.encode(request.getPassword()))
-                .enabled(true)
-                .emailVerified(true)
-                .status(User.UserStatus.ACTIVE)
-                .build();
+        Optional<User> existingUserOpt = userRepository.findByEmailAndDeletedFalse(invitation.getEmail());
+        User effectiveUser;
 
-        User savedUser = userRepository.save(user);
+        if (existingUserOpt.isPresent()) {
+            // Existing global user account
+            effectiveUser = existingUserOpt.get();
 
-        UserProfile profile = UserProfile.builder()
-                .user(savedUser)
-                .build();
-        userProfileRepository.save(profile);
+            // If user has password provided and no password yet, or updating password
+            if (request.getPassword() != null && !request.getPassword().isBlank()) {
+                if (!request.getPassword().equals(request.getConfirmPassword())) {
+                    throw new PasswordMismatchException("Passwords do not match");
+                }
+                if (effectiveUser.getPasswordHash() == null) {
+                    effectiveUser.setPasswordHash(passwordEncoder.encode(request.getPassword()));
+                    userRepository.save(effectiveUser);
+                }
+            }
 
-        UserRole userRole = UserRole.builder()
-                .user(savedUser)
-                .role(tenantAdminRole)
-                .active(true)
-                .build();
-        userRoleRepository.save(userRole);
-        savedUser.getUserRoles().add(userRole);
+            // Assign or activate TENANT_ADMIN role in target tenant
+            Optional<UserRole> existingRoleOpt = userRoleRepository.findByUserIdAndTenantIdAndRoleId(
+                    effectiveUser.getId(), tenant.getId(), tenantAdminRole.getId());
+
+            if (existingRoleOpt.isEmpty()) {
+                UserRole newRole = UserRole.builder()
+                        .user(effectiveUser)
+                        .tenant(tenant)
+                        .role(tenantAdminRole)
+                        .active(true)
+                        .assignedByUserId(invitation.getInvitedBy() != null ? invitation.getInvitedBy().getId() : null)
+                        .build();
+                userRoleRepository.save(newRole);
+            } else {
+                UserRole existingRole = existingRoleOpt.get();
+                if (!existingRole.isActive()) {
+                    existingRole.setActive(true);
+                    userRoleRepository.save(existingRole);
+                }
+            }
+
+        } else {
+            // New user registration flow
+            if (request.getPassword() == null || !request.getPassword().equals(request.getConfirmPassword())) {
+                throw new PasswordMismatchException("Passwords do not match");
+            }
+
+            if (request.getUsername() == null || request.getUsername().trim().isBlank()) {
+                throw new IllegalArgumentException("Username is required");
+            }
+
+            String chosenUsername = request.getUsername().trim();
+            if (userRepository.findByUsernameAndDeletedFalse(chosenUsername).isPresent()) {
+                throw new UsernameAlreadyExistsException("Username already exists");
+            }
+
+            User newUser = User.builder()
+                    .tenant(null)
+                    .username(chosenUsername)
+                    .email(invitation.getEmail())
+                    .passwordHash(passwordEncoder.encode(request.getPassword()))
+                    .enabled(true)
+                    .emailVerified(true)
+                    .status(User.UserStatus.ACTIVE)
+                    .build();
+
+            effectiveUser = userRepository.save(newUser);
+
+            UserProfile profile = UserProfile.builder()
+                    .user(effectiveUser)
+                    .build();
+            userProfileRepository.save(profile);
+            effectiveUser.setUserProfile(profile);
+
+            UserRole userRole = UserRole.builder()
+                    .user(effectiveUser)
+                    .tenant(tenant)
+                    .role(tenantAdminRole)
+                    .active(true)
+                    .assignedByUserId(invitation.getInvitedBy() != null ? invitation.getInvitedBy().getId() : null)
+                    .build();
+            userRoleRepository.save(userRole);
+        }
 
         invitation.setStatus(InvitationStatus.ACCEPTED);
         invitation.setAcceptedAt(Instant.now());
         invitationRepository.save(invitation);
 
         log.info("TENANT_ADMIN_INVITATION_ACCEPTED userId={} tenantSlug={} email={}",
-                savedUser.getId(), tenant.getSlug(), invitation.getEmail());
+                effectiveUser.getId(), tenant.getSlug(), invitation.getEmail());
 
         return AcceptTenantAdminInvitationResponse.builder()
                 .message("Invitation accepted successfully. Please log in with your credentials.")
                 .loginRequired(true)
-                .username(savedUser.getUsername())
-                .email(savedUser.getEmail())
+                .username(effectiveUser.getUsername())
+                .email(effectiveUser.getEmail())
                 .tenantSlug(tenant.getSlug())
                 .nextAction("PROCEED_TO_LOGIN")
                 .build();

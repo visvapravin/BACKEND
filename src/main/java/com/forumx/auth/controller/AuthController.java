@@ -895,4 +895,32 @@ public class AuthController {
                         "Current user retrieved successfully",
                         response));
     }
+
+    /**
+     * Returns the active workspace memberships and roles for the authenticated user.
+     *
+     * @param authentication the Spring Security authentication context
+     * @return response entity containing list of workspace memberships
+     */
+    @GetMapping(
+            value = "/memberships",
+            produces = MediaType.APPLICATION_JSON_VALUE
+    )
+    @SecurityRequirement(name = "bearerAuth")
+    @Operation(
+            summary = "Get user workspace memberships",
+            description = "Returns all active tenant workspace memberships and roles held by the authenticated user."
+    )
+    public ResponseEntity<ApiResponse<java.util.List<com.forumx.auth.dto.response.TenantMembershipResponse>>> getUserMemberships(
+            Authentication authentication
+    ) {
+        CustomUserDetails userDetails = (CustomUserDetails) authentication.getPrincipal();
+        Long userId = userDetails.getUserId();
+        java.util.List<com.forumx.auth.dto.response.TenantMembershipResponse> memberships =
+                authenticationService.getUserMemberships(userId);
+        return ResponseEntity.ok(
+                ApiResponse.success(
+                        "User memberships retrieved successfully",
+                        memberships));
+    }
 }

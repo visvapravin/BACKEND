@@ -6,6 +6,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import com.forumx.auth.entity.User;
+import com.forumx.auth.entity.UserRole;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -13,11 +14,19 @@ import org.springframework.security.core.userdetails.UserDetails;
 public class CustomUserDetails implements UserDetails {
 
     private final User user;
+    private final Long activeTenantId;
+    private final String activeTenantSlug;
     private final Set<GrantedAuthority> authorities;
 
     public CustomUserDetails(User user) {
+        this(user, null, null, user.getUserRoles());
+    }
+
+    public CustomUserDetails(User user, Long activeTenantId, String activeTenantSlug, Collection<UserRole> activeRoles) {
         this.user = user;
-        this.authorities = Collections.unmodifiableSet(buildAuthorities());
+        this.activeTenantId = activeTenantId;
+        this.activeTenantSlug = activeTenantSlug;
+        this.authorities = Collections.unmodifiableSet(buildAuthorities(activeRoles));
     }
 
     // ── UserDetails contract ────────────────────────────────────────────
@@ -57,7 +66,7 @@ public class CustomUserDetails implements UserDetails {
         return user.isEnabled();
     }
 
-    // ── Accessor ────────────────────────────────────────────────────────
+    // ── Accessors ───────────────────────────────────────────────────────
 
     public User getUser() {
         return user;
@@ -68,30 +77,42 @@ public class CustomUserDetails implements UserDetails {
     }
 
     public Long getTenantId() {
-        return user.getTenant() == null ? null : user.getTenant().getId();
+        return activeTenantId;
+    }
+
+    public String getTenantSlug() {
+        return activeTenantSlug;
+    }
+
+    public String getScope() {
+        return activeTenantId == null ? "PLATFORM" : "TENANT";
     }
 
     // ── Authority builder ───────────────────────────────────────────────
 
-    private Set<GrantedAuthority> buildAuthorities() {
-        if (user.getUserRoles() == null) {
+    private Set<GrantedAuthority> buildAuthorities(Collection<UserRole> rolesToUse) {
+        if (rolesToUse == null) {
             return Set.of();
         }
 
-        return user.getUserRoles().stream()
-                .filter(userRole -> userRole.isActive())
-                .map(userRole -> userRole.getRole())
-                .filter(role -> role.isActive())
+        return rolesToUse.stream()
+                .filter(UserRole::isActive)
+                .map(UserRole::getRole)
+                .filter(role -> role != null && role.isActive())
                 .flatMap(role -> {
-                    Set<GrantedAuthority> grants = role.getRolePermissions().stream()
-                            .filter(rp -> rp.isActive())
-                            .map(rp -> rp.getPermission())
-                            .filter(permission -> permission.isActive())
-                            .map(permission -> new SimpleGrantedAuthority(permission.getPermissionCode()))
-                            .collect(Collectors.toSet());
+                    Set<GrantedAuthority> grants = role.getRolePermissions() != null
+                            ? role.getRolePermissions().stream()
+                                    .filter(rp -> rp != null && rp.isActive())
+                                    .map(rp -> rp.getPermission())
+                                    .filter(permission -> permission != null && permission.isActive())
+                                    .map(permission -> new SimpleGrantedAuthority(permission.getPermissionCode()))
+                                    .collect(Collectors.toSet())
+                            : new java.util.HashSet<>();
 
                     // Also grant the role itself as ROLE_<NAME>
-                    grants.add(new SimpleGrantedAuthority("ROLE_" + role.getRoleName().name()));
+                    if (role.getRoleName() != null) {
+                        grants.add(new SimpleGrantedAuthority("ROLE_" + role.getRoleName().name()));
+                    }
 
                     return grants.stream();
                 })

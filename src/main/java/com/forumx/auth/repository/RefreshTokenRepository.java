@@ -48,11 +48,26 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshToken, Long
      *
      * @param userId the target user's ID
      */
-    @Modifying
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""
             UPDATE RefreshToken rt
             SET rt.revoked = true, rt.revokedAt = CURRENT_TIMESTAMP
             WHERE rt.user.id = :userId AND rt.revoked = false
             """)
     void revokeAllByUserId(@Param("userId") Long userId);
+
+    /**
+     * Bulk-revokes all non-revoked refresh tokens for every user in a tenant in one
+     * statement. Used during tenant deactivation to invalidate all active sessions
+     * without an N+1 per-user loop.
+     *
+     * @param tenantId the tenant whose users' tokens should be revoked
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            UPDATE RefreshToken rt
+            SET rt.revoked = true, rt.revokedAt = CURRENT_TIMESTAMP
+            WHERE rt.tenant.id = :tenantId AND rt.revoked = false
+            """)
+    void revokeAllByTenantId(@Param("tenantId") Long tenantId);
 }

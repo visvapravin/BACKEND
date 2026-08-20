@@ -53,6 +53,17 @@ public final class RedisKeys {
         return PRESENCE_NS + ":" + "tenant" + ":" + tenantId + ":" + "online";
     }
 
+    /**
+     * Tenant-scoped session membership set for a specific user.
+     * Holds all active sessionIds for the given user within the given tenant.
+     * Example: {@code forumx:presence:tenant:3:user:42:sessions}
+     *
+     * <p>Use {@link #presenceSessions(long)} for the legacy global sessions key.
+     */
+    public static String presenceTenantUserSessions(long tenantId, long userId) {
+        return PRESENCE_NS + ":" + "tenant" + ":" + tenantId + ":" + "user" + ":" + userId + ":" + "sessions";
+    }
+
     // -------------------------------------------------------------------------
     // Generic key builders (infrastructure level only)
     // -------------------------------------------------------------------------

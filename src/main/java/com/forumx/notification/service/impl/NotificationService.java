@@ -44,6 +44,7 @@ public class NotificationService implements NotificationApplicationService {
     private final NotificationRepository notificationRepository;
     private final TenantRepository tenantRepository;
     private final UserRepository userRepository;
+    private final com.forumx.auth.repository.UserRoleRepository userRoleRepository;
     private final NotificationMapper notificationMapper;
     private final AuthenticationFacade authenticationFacade;
     private final TenantResolver tenantResolver;
@@ -400,7 +401,7 @@ public class NotificationService implements NotificationApplicationService {
     private User loadTenantUser(Long userId, Long tenantId, String description) {
         User user = userRepository.findByIdAndDeletedFalse(userId)
                 .orElseThrow(() -> new EntityNotFoundException(description + " not found with ID: " + userId));
-        if (user.getTenant() == null || !tenantId.equals(user.getTenant().getId())) {
+        if (!userRoleRepository.existsActiveMembership(user.getId(), tenantId)) {
             throw new AccessDeniedException(description + " does not belong to the notification tenant");
         }
         return user;

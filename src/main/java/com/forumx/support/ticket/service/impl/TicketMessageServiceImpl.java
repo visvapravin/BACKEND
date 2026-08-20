@@ -1,8 +1,11 @@
 package com.forumx.support.ticket.service.impl;
 
+import java.util.List;
 import java.util.UUID;
 import com.forumx.auth.entity.User;
+import com.forumx.auth.entity.UserRole;
 import com.forumx.auth.repository.UserRepository;
+import com.forumx.auth.repository.UserRoleRepository;
 import com.forumx.common.exception.TicketClosedException;
 import com.forumx.common.exception.TicketNotFoundException;
 import com.forumx.security.facade.AuthenticationFacade;
@@ -38,6 +41,7 @@ public class TicketMessageServiceImpl implements TicketMessageService {
     private final TicketMessageRepository ticketMessageRepository;
     private final TicketRepository ticketRepository;
     private final UserRepository userRepository;
+    private final UserRoleRepository userRoleRepository;
     private final TicketMessageMapper ticketMessageMapper;
     private final AuthenticationFacade authenticationFacade;
     private final TenantResolver tenantResolver;
@@ -159,8 +163,10 @@ public class TicketMessageServiceImpl implements TicketMessageService {
         // Throw EntityNotFoundException instead of TicketNotFoundException when the user is not found
         User user = userRepository.findByIdAndDeletedFalse(details.getUserId())
                 .orElseThrow(() -> new EntityNotFoundException("User not found with ID: " + details.getUserId()));
-        if (user.getTenant() == null || !tenantId.equals(user.getTenant().getId())) {
-            throw new AccessDeniedException("User does not belong to the current tenant");
+        // Authoritative tenant membership check via UserRole — do NOT use user.getTenant()
+        List<UserRole> activeRoles = userRoleRepository.findActiveRolesByUserIdAndTenantId(user.getId(), tenantId);
+        if (activeRoles.isEmpty()) {
+            throw new AccessDeniedException("User does not have active membership in the current tenant");
         }
         return new CurrentUser(details.getUserId(), tenantId, user, details);
     }

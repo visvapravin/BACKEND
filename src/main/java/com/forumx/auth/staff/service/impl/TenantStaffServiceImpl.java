@@ -71,23 +71,9 @@ public class TenantStaffServiceImpl implements TenantStaffService {
     @Transactional(readOnly = true)
     public Page<ModeratorSummaryResponse> listModerators(Pageable pageable) {
         Long tenantId = resolvedTenantId();
-
-        // Step 1: fetch IDs at DB level — avoids incorrect Hibernate pagination on JOIN FETCH
-        Page<Long> userIdPage = userRoleRepository.findUserIdsWithActiveRoleInTenant(
+        Page<User> userPage = userRepository.findUsersWithActiveRoleInTenant(
                 tenantId, RoleType.MODERATOR, pageable);
-
-        if (userIdPage.isEmpty()) {
-            return Page.empty(pageable);
-        }
-
-        // Step 2: load full user entities for the current page of IDs
-        List<User> users = userRepository.findAllById(userIdPage.getContent());
-
-        List<ModeratorSummaryResponse> content = users.stream()
-                .map(ModeratorSummaryResponse::from)
-                .toList();
-
-        return new PageImpl<>(content, pageable, userIdPage.getTotalElements());
+        return userPage.map(ModeratorSummaryResponse::from);
     }
 
     // ── Moderator Detail ────────────────────────────────────────────────
@@ -253,19 +239,13 @@ public class TenantStaffServiceImpl implements TenantStaffService {
                 .orElseThrow(() -> new ModeratorNotFoundException(
                         "Moderator not found: " + userId));
 
-        // Tenant isolation — return NOT_FOUND to avoid resource existence leakage
-        if (!tenantId.equals(user.getTenant().getId())) {
-            throw new ModeratorNotFoundException(
-                    "Moderator not found: " + userId);
-        }
-
-        // Role check via repository (authoritative source)
-        boolean isModerator = userRoleRepository.existsActiveRoleByUserIdAndRoleName(
-                userId, RoleType.MODERATOR);
+        // Authoritative tenant-scoped role check via UserRoleRepository
+        boolean isModerator = userRoleRepository.existsActiveRoleByUserIdAndTenantIdAndRoleName(
+                userId, tenantId, RoleType.MODERATOR);
 
         if (!isModerator) {
             throw new ModeratorNotFoundException(
-                    "User " + userId + " does not have MODERATOR account role");
+                    "Moderator not found: " + userId);
         }
 
         return user;

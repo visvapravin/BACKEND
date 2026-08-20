@@ -9,6 +9,12 @@ public interface PresenceService {
     void markOfflineBySessionId(String sessionId);
     void updateHeartbeat(String sessionId);
     boolean isOnline(Long userId);
+    /**
+     * Returns true only if the user has at least one active WebSocket session
+     * within the specified tenant. This is the authoritative check for
+     * tenant-scoped presence (e.g. dashboard online counts, participant status).
+     */
+    boolean isUserOnlineInTenant(Long tenantId, Long userId);
     Optional<UserPresence> getPresence(Long userId);
     java.util.Map<Long, UserPresence> getPresence(java.util.Collection<Long> userIds);
     int getActiveSessions(Long userId);
@@ -16,4 +22,5 @@ public interface PresenceService {
     int getTenantOnlineCount(Long tenantId);
     void evictPresence(Long userId, Long tenantId);
 }
+
 

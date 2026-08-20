@@ -1,10 +1,13 @@
 package com.forumx.support.ticket.service.impl;
 
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Optional;
 
 import com.forumx.auth.entity.User;
 import com.forumx.auth.repository.UserRepository;
+import com.forumx.auth.repository.UserRoleRepository;
 import com.forumx.security.facade.AuthenticationFacade;
 import com.forumx.security.model.CustomUserDetails;
 import com.forumx.support.ticket.dto.request.AssignTicketRequest;
@@ -39,6 +42,7 @@ public class TicketServiceImpl implements TicketService {
 
     private final TicketRepository ticketRepository;
     private final UserRepository userRepository;
+    private final UserRoleRepository userRoleRepository;
     private final TenantRepository tenantRepository;
     private final TicketMapper ticketMapper;
     private final AuthenticationFacade authenticationFacade;
@@ -72,9 +76,9 @@ public class TicketServiceImpl implements TicketService {
         chatSessionService.getOrCreateSession(savedTicket, current.tenantId());
 
         // Find moderators, admins, and super admins to notify (excluding creator self-notification)
-        java.util.List<User> moderators = userRepository.findUsersByTenantIdAndRoles(
+        List<User> moderators = userRepository.findUsersByTenantIdAndRoles(
                 current.tenantId(),
-                java.util.List.of(RoleType.MODERATOR, RoleType.TENANT_ADMIN, RoleType.PLATFORM_ADMIN)
+                List.of(RoleType.MODERATOR, RoleType.TENANT_ADMIN)
         );
 
         for (User moderator : moderators) {
@@ -118,17 +122,15 @@ public class TicketServiceImpl implements TicketService {
     @Transactional(readOnly = true)
     public Page<TicketResponse> getMyTickets(TicketStatus status, Pageable pageable) {
         CurrentUser current = resolveCurrentUser();
-        Page<Ticket> tickets;
-        if (elevated(current.details())) {
-            tickets = status != null
-                    ? ticketRepository.findByTenant_IdAndStatusAndDeletedFalse(current.tenantId(), status, pageable)
-                    : ticketRepository.findByTenant_IdAndDeletedFalse(current.tenantId(), pageable);
-        } else {
-            tickets = status != null
-                    ? ticketRepository.findByCreator_IdAndTenant_IdAndStatusAndDeletedFalse(current.userId(), current.tenantId(), status, pageable)
-                    : ticketRepository.findByCreator_IdAndTenant_IdAndDeletedFalse(current.userId(), current.tenantId(), pageable);
-        }
-        return tickets.map(ticketMapper::toResponse);
+        return elevated(current.details())
+                ? (status != null
+                ? ticketRepository.findByTenant_IdAndStatusAndDeletedFalse(current.tenantId(), status, pageable)
+                : ticketRepository.findByTenant_IdAndDeletedFalse(current.tenantId(), pageable))
+                .map(ticketMapper::toResponse)
+                : (status != null
+                ? ticketRepository.findByCreator_IdAndTenant_IdAndStatusAndDeletedFalse(current.userId(), current.tenantId(), status, pageable)
+                : ticketRepository.findByCreator_IdAndTenant_IdAndDeletedFalse(current.userId(), current.tenantId(), pageable))
+                .map(ticketMapper::toResponse);
     }
 
     @Override
@@ -138,57 +140,58 @@ public class TicketServiceImpl implements TicketService {
         Long tenantId = current.tenantId();
 
         long waiting = ticketRepository.countByTenant_IdAndStatusAndDeletedFalse(tenantId, TicketStatus.OPEN);
-        long open = ticketRepository.countByTenant_IdAndStatusAndDeletedFalse(tenantId, TicketStatus.IN_PROGRESS);
-        long closed = ticketRepository.countByTenant_IdAndStatusInAndDeletedFalse(
-                tenantId, java.util.List.of(TicketStatus.RESOLVED, TicketStatus.CLOSED));
+        long inProgress = ticketRepository.countByTenant_IdAndStatusAndDeletedFalse(tenantId, TicketStatus.IN_PROGRESS);
+        long open = waiting + inProgress;
+        long closed = ticketRepository.countByTenant_IdAndStatusAndDeletedFalse(tenantId, TicketStatus.CLOSED);
 
-        java.time.ZoneId zoneId;
-        try {
-            String tz = current.user().getTenant() != null ? current.user().getTenant().getTimezone() : null;
-            zoneId = (tz != null && !tz.isBlank()) ? java.time.ZoneId.of(tz) : java.time.ZoneOffset.UTC;
-        } catch (Exception e) {
-            zoneId = java.time.ZoneOffset.UTC;
-        }
+        // Use explicit UTC to avoid JVM-timezone-dependent day boundaries
+        LocalDateTime startOfDay = LocalDateTime.now(ZoneOffset.UTC).toLocalDate().atStartOfDay();
+        long resolvedToday = ticketRepository.countByTenant_IdAndResolvedAtGreaterThanEqualAndDeletedFalse(tenantId, startOfDay);
 
-        java.time.ZonedDateTime nowInTenantZone = java.time.ZonedDateTime.now(zoneId);
-        java.time.ZonedDateTime startOfTenantDay = nowInTenantZone.toLocalDate().atStartOfDay(zoneId);
-        java.time.ZonedDateTime startOfNextTenantDay = startOfTenantDay.plusDays(1);
-
-        LocalDateTime startDateTime = LocalDateTime.ofInstant(startOfTenantDay.toInstant(), java.time.ZoneOffset.UTC);
-        LocalDateTime endDateTime = LocalDateTime.ofInstant(startOfNextTenantDay.toInstant(), java.time.ZoneOffset.UTC);
-
-        long resolvedToday = ticketRepository.countByTenant_IdAndResolvedAtGreaterThanEqualAndResolvedAtLessThanAndDeletedFalse(
-                tenantId, startDateTime, endDateTime);
-
-
-        java.util.List<com.forumx.presence.dto.UserPresence> onlineList = presenceService.getTenantOnlineUsers(tenantId);
-        java.util.List<RoleType> modRoles = java.util.List.of(RoleType.MODERATOR, RoleType.TENANT_ADMIN, RoleType.PLATFORM_ADMIN);
-        java.util.Set<Long> modUserIds = userRepository.findUsersByTenantIdAndRoles(tenantId, modRoles)
-                .stream().map(com.forumx.auth.entity.User::getId).collect(java.util.stream.Collectors.toSet());
-        long onlineModerators = onlineList.stream().filter(p -> modUserIds.contains(p.getUserId())).count();
+        List<User> moderators = userRepository.findUsersByTenantIdAndRoles(
+                tenantId,
+                List.of(RoleType.MODERATOR, RoleType.TENANT_ADMIN)
+        );
+        long onlineModerators = moderators.stream()
+                .map(User::getId)
+                .distinct()
+                .filter(modId -> presenceService.isUserOnlineInTenant(tenantId, modId))
+                .count();
 
         return new com.forumx.support.ticket.dto.response.SupportDashboardSummary(
-                waiting, open, closed, resolvedToday, onlineModerators);
+                waiting,
+                open,
+                closed,
+                resolvedToday,
+                onlineModerators
+        );
     }
 
     @Override
     @Transactional
     public TicketResponse updateStatus(Long ticketId, UpdateTicketStatusRequest request) {
-        CurrentUser current = requireElevatedUser();
+        CurrentUser current = resolveCurrentUser();
         Ticket ticket = loadTenantTicket(ticketId, current.tenantId());
+        boolean isElevated = elevated(current.details());
+        boolean isCreator = ticket.getCreator().getId().equals(current.userId());
+
+        if (!isElevated && !isCreator) {
+            throw new AccessDeniedException("You are not authorized to update this ticket");
+        }
+
+        TicketStatus targetStatus = request.getStatus();
+        transitionPolicy.validateTransition(ticket.getStatus(), targetStatus);
+
         String oldStatus = ticket.getStatus().name();
-
-        transitionPolicy.validateTransition(ticket.getStatus(), request.getStatus());
-
-        ticket.setStatus(request.getStatus());
+        ticket.setStatus(targetStatus);
         LocalDateTime now = LocalDateTime.now();
-        if (request.getStatus() == TicketStatus.RESOLVED) {
+        if (targetStatus == TicketStatus.RESOLVED) {
             ticket.setResolvedAt(now);
             chatSessionService.updateSessionStatusByTicket(ticketId, current.tenantId(), com.forumx.support.chat.entity.ChatSessionStatus.RESOLVED);
-        } else if (request.getStatus() == TicketStatus.CLOSED) {
+        } else if (targetStatus == TicketStatus.CLOSED) {
             ticket.setClosedAt(now);
             chatSessionService.updateSessionStatusByTicket(ticketId, current.tenantId(), com.forumx.support.chat.entity.ChatSessionStatus.CLOSED);
-        } else if (request.getStatus() == TicketStatus.REOPENED) {
+        } else if (targetStatus == TicketStatus.REOPENED) {
             com.forumx.support.chat.entity.ChatSessionStatus reopenedChatStatus = (ticket.getAssignedTo() != null)
                     ? com.forumx.support.chat.entity.ChatSessionStatus.ACTIVE
                     : com.forumx.support.chat.entity.ChatSessionStatus.WAITING;
@@ -216,7 +219,8 @@ public class TicketServiceImpl implements TicketService {
         Ticket ticket = loadTenantTicket(ticketId, current.tenantId());
         User assignee = userRepository.findByIdAndDeletedFalse(request.getAssignedToUserId())
                 .orElseThrow(() -> new EntityNotFoundException("Assigned user not found with ID: " + request.getAssignedToUserId()));
-        if (assignee.getTenant() == null || !current.tenantId().equals(assignee.getTenant().getId())) {
+        List<com.forumx.auth.entity.UserRole> assigneeRoles = userRoleRepository.findActiveRolesByUserIdAndTenantId(assignee.getId(), current.tenantId());
+        if (assigneeRoles.isEmpty()) {
             throw new AccessDeniedException("Assigned user does not belong to the current tenant");
         }
         ticket.setAssignedTo(assignee);
@@ -263,16 +267,29 @@ public class TicketServiceImpl implements TicketService {
     private CurrentUser resolveCurrentUser() {
         Long tenantId = tenantResolver.resolveTenantId();
         CustomUserDetails details = authenticationFacade.getCurrentUserDetails();
-        if (tenantId == null || details == null) {
+        log.info("[TICKET_AUTH] resolveCurrentUser: resolvedTenantId={}, detailsTenantId={}, userId={}, username={}",
+                tenantId, (details != null ? details.getTenantId() : null),
+                (details != null ? details.getUserId() : null),
+                (details != null ? details.getUsername() : null));
+
+        if (tenantId == null || details == null || details.getTenantId() == null) {
+            log.warn("[TICKET_AUTH] Missing tenant context: resolvedTenantId={}, details={}", tenantId, details);
             throw new AccessDeniedException("Authenticated tenant context is required");
         }
         if (!tenantId.equals(details.getTenantId())) {
+            log.warn("[TICKET_AUTH] Tenant mismatch: resolvedTenantId={}, detailsTenantId={}", tenantId, details.getTenantId());
             throw new AccessDeniedException("User does not belong to the current tenant");
         }
         User user = userRepository.findByIdAndDeletedFalse(details.getUserId())
                 .orElseThrow(() -> new EntityNotFoundException("User not found with ID: " + details.getUserId()));
-        if (user.getTenant() == null || !tenantId.equals(user.getTenant().getId())) {
-            throw new AccessDeniedException("User does not belong to the current tenant");
+
+        // Authoritative tenant membership check: user must have active roles in the current tenant
+        List<com.forumx.auth.entity.UserRole> activeRoles = userRoleRepository.findActiveRolesByUserIdAndTenantId(user.getId(), tenantId);
+        log.info("[TICKET_AUTH] activeRoles found for userId={} in tenantId={}: count={}",
+                user.getId(), tenantId, activeRoles.size());
+        if (activeRoles.isEmpty()) {
+            log.warn("[TICKET_AUTH] No active UserRole found for userId={} in tenantId={}", user.getId(), tenantId);
+            throw new AccessDeniedException("User does not have active membership in the current tenant");
         }
         return new CurrentUser(details.getUserId(), tenantId, user, details);
     }
@@ -280,7 +297,6 @@ public class TicketServiceImpl implements TicketService {
     private boolean elevated(CustomUserDetails details) {
         return details.getAuthorities().stream().map(GrantedAuthority::getAuthority)
                 .anyMatch(authority -> authority.equals("ROLE_TENANT_ADMIN")
-                        || authority.equals("ROLE_PLATFORM_ADMIN")
                         || authority.equals("ROLE_MODERATOR")
                         || authority.equals("ROLE_ADMIN")
                         || authority.equals("ROLE_SUPER_ADMIN"));

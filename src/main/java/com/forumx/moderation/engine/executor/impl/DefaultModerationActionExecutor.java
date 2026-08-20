@@ -101,9 +101,8 @@ public class DefaultModerationActionExecutor implements ModerationActionExecutor
             if (user != null) {
                 user.setEnabled(false);
                 userRepository.save(user);
-                Long uTenantId = user.getTenant() != null ? user.getTenant().getId() : tenantId;
                 if (presenceService != null) {
-                    presenceService.evictPresence(user.getId(), uTenantId);
+                    presenceService.evictPresence(user.getId(), tenantId);
                 }
                 log.info("Suspended/Banned User id={} username={}", user.getId(), user.getUsername());
             }

@@ -34,7 +34,7 @@ public class ModeratorSummaryResponse {
                 .username(user.getUsername())
                 .email(user.getEmail())
                 .enabled(user.isEnabled())
-                .status(user.getStatus().name())
+                .status(user.getStatus() != null ? user.getStatus().name() : "ACTIVE")
                 .emailVerified(user.isEmailVerified())
                 .createdAt(user.getCreatedAt())
                 .lastLoginAt(user.getLastLoginAt())

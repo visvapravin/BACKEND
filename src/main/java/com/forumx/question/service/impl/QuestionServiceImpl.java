@@ -39,6 +39,7 @@ public class QuestionServiceImpl implements QuestionService {
     private final QuestionRepository questionRepository;
     private final QuestionViewRepository questionViewRepository;
     private final UserRepository userRepository;
+    private final com.forumx.auth.repository.UserRoleRepository userRoleRepository;
     private final TenantRepository tenantRepository;
     private final QuestionMapper questionMapper;
     private final AuthenticationFacade authenticationFacade;
@@ -110,18 +111,12 @@ public class QuestionServiceImpl implements QuestionService {
         Question question = questionRepository.findByIdAndTenantIdAndDeletedFalse(questionId, resolvedTenantId)
                 .orElseThrow(() -> new EntityNotFoundException("Question not found with ID: " + questionId));
 
-        // 4. Defensive Tenant Check
-        if (question.getAuthor() == null || question.getAuthor().getTenant() == null ||
-                !question.getAuthor().getTenant().getId().equals(question.getTenant().getId())) {
-            throw new DomainIntegrityException("Database corruption detected: Question and Author tenant IDs do not match");
-        }
-
-        // 5. Status Validation
+        // 4. Status Validation
         if (question.getStatus() == QuestionStatus.ARCHIVED) {
             throw new EntityNotFoundException("Question is archived and not accessible");
         }
 
-        // 6. Unique View Increment (only when newly inserted)
+        // 5. Unique View Increment (only when newly inserted)
         java.time.Instant now = java.time.Instant.now();
         int inserted = questionViewRepository.insertIfNotExists(
                 resolvedTenantId,
@@ -137,11 +132,11 @@ public class QuestionServiceImpl implements QuestionService {
             question.setViewCount(question.getViewCount() + 1);
         }
 
-        // 7. Logging
+        // 6. Logging
         log.info("Question retrieved. tenantId={}, userId={}, questionId={}",
                 resolvedTenantId, currentUserDetails.getUserId(), questionId);
 
-        // 8. Map Response
+        // 7. Map Response
         return questionMapper.toQuestionResponse(question);
     }
 
@@ -161,13 +156,7 @@ public class QuestionServiceImpl implements QuestionService {
         Question question = questionRepository.findByIdAndTenantIdAndDeletedFalse(questionId, resolvedTenantId)
                 .orElseThrow(() -> new EntityNotFoundException("Question not found with ID: " + questionId));
 
-        // 4. Defensive Tenant Check
-        if (question.getAuthor() == null || question.getAuthor().getTenant() == null ||
-                !question.getAuthor().getTenant().getId().equals(question.getTenant().getId())) {
-            throw new DomainIntegrityException("Database corruption detected: Question and Author tenant IDs do not match");
-        }
-
-        // 5. Status Validation
+        // 4. Status Validation
         if (question.getStatus() == QuestionStatus.ARCHIVED) {
             throw new EntityNotFoundException("Question is archived and not editable");
         }
@@ -175,7 +164,7 @@ public class QuestionServiceImpl implements QuestionService {
             throw new AccessDeniedException("Closed questions cannot be modified");
         }
 
-        // 6. Authorization
+        // 5. Authorization
         boolean isAuthor = currentUserDetails.getUserId().equals(question.getAuthor().getId());
         boolean isAuthorized = isAuthor || currentUserDetails.getAuthorities().stream()
                 .map(org.springframework.security.core.GrantedAuthority::getAuthority)
@@ -187,14 +176,14 @@ public class QuestionServiceImpl implements QuestionService {
             throw new AccessDeniedException("User is not authorized to update this question");
         }
 
-        // 7. Update Editable Fields
+        // 6. Update Editable Fields
         questionMapper.updateQuestionFromRequest(request, question);
 
-        // 8. Logging
+        // 7. Logging
         log.info("Question updated successfully. tenantId={}, userId={}, questionId={}",
                 resolvedTenantId, currentUserDetails.getUserId(), questionId);
 
-        // 9. Response
+        // 8. Response
         return questionMapper.toQuestionResponse(question);
     }
 
@@ -214,19 +203,12 @@ public class QuestionServiceImpl implements QuestionService {
         Question question = questionRepository.findByIdAndTenantIdAndDeletedFalse(questionId, resolvedTenantId)
                 .orElseThrow(() -> new EntityNotFoundException("Question not found with ID: " + questionId));
 
-        // 4. Defensive Tenant Check
-        if (!question.getTenant().getId().equals(resolvedTenantId) ||
-                question.getAuthor() == null || question.getAuthor().getTenant() == null ||
-                !question.getAuthor().getTenant().getId().equals(question.getTenant().getId())) {
-            throw new DomainIntegrityException("Database corruption detected: Question and Author tenant IDs do not match");
-        }
-
-        // 5. Status Validation
+        // 4. Status Validation
         if (question.getStatus() == QuestionStatus.ARCHIVED) {
             throw new EntityNotFoundException("Question is archived and not accessible");
         }
 
-        // 6. Authorization
+        // 5. Authorization
         boolean isAuthor = currentUserDetails.getUserId().equals(question.getAuthor().getId());
         boolean isElevated = currentUserDetails.getAuthorities().stream()
                 .map(org.springframework.security.core.GrantedAuthority::getAuthority)
@@ -248,11 +230,11 @@ public class QuestionServiceImpl implements QuestionService {
             }
         }
 
-        // 7. Soft Delete
+        // 6. Soft Delete
         question.setDeleted(true);
         question.setDeletedAt(java.time.Instant.now());
 
-        // 8. Logging
+        // 7. Logging
         log.info("Question deleted successfully. tenantId={}, userId={}, questionId={}",
                 resolvedTenantId, currentUserDetails.getUserId(), questionId);
     }
@@ -283,7 +265,7 @@ public class QuestionServiceImpl implements QuestionService {
     private User loadCurrentUser(CustomUserDetails currentUserDetails) {
         User user = userRepository.findByIdAndDeletedFalse(currentUserDetails.getUserId())
                 .orElseThrow(() -> new EntityNotFoundException("User not found with ID: " + currentUserDetails.getUserId()));
-        if (user.getTenant() == null || !user.getTenant().getId().equals(currentUserDetails.getTenantId())) {
+        if (!userRoleRepository.existsActiveMembership(user.getId(), currentUserDetails.getTenantId())) {
             throw new AccessDeniedException("User does not belong to the current tenant");
         }
         return user;

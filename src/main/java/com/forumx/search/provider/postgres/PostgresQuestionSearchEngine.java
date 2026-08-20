@@ -1,7 +1,5 @@
 package com.forumx.search.provider.postgres;
 
-import com.forumx.question.entity.Question;
-import com.forumx.question.entity.QuestionStatus;
 import com.forumx.search.domain.QuestionSearchResult;
 import com.forumx.search.dto.request.QuestionSearchFilter;
 import com.forumx.search.dto.request.SearchSort;
@@ -10,6 +8,8 @@ import com.forumx.search.service.SearchSnippetService;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import jakarta.persistence.Query;
+import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -31,9 +31,9 @@ public class PostgresQuestionSearchEngine implements QuestionSearchEngine {
     public Page<QuestionSearchResult> searchQuestions(
             Long tenantId, String queryStr, QuestionSearchFilter filter, SearchSort sort, Pageable pageable) {
 
-        StringBuilder sql = new StringBuilder("SELECT q.* ");
+        StringBuilder sql = new StringBuilder("SELECT q.id, q.title, q.content, u.username, q.status, q.view_count, q.answer_count, q.created_at ");
         StringBuilder countSql = new StringBuilder("SELECT COUNT(q.id) ");
-        StringBuilder fromWhere = new StringBuilder("FROM questions q JOIN users u ON q.author_id = u.id WHERE q.deleted = false ");
+        StringBuilder fromWhere = new StringBuilder("FROM questions q JOIN users u ON q.author_id = u.id WHERE q.deleted = false AND u.deleted = false ");
 
         if (tenantId != null) {
             fromWhere.append("AND q.tenant_id = :tenantId ");
@@ -45,16 +45,16 @@ public class PostgresQuestionSearchEngine implements QuestionSearchEngine {
             }
             if (filter.solved() != null) {
                 if (filter.solved()) {
-                    fromWhere.append("AND q.status = 'SOLVED' ");
+                    fromWhere.append("AND q.status = 'ANSWERED' ");
                 } else {
-                    fromWhere.append("AND q.status != 'SOLVED' ");
+                    fromWhere.append("AND q.status != 'ANSWERED' ");
                 }
             }
             if (filter.createdAfter() != null) {
                 fromWhere.append("AND q.created_at >= :createdAfter ");
             }
             if (filter.createdBefore() != null) {
-                fromWhere.append("AND q.created_before <= :createdBefore ");
+                fromWhere.append("AND q.created_at <= :createdBefore ");
             }
         }
 
@@ -72,7 +72,7 @@ public class PostgresQuestionSearchEngine implements QuestionSearchEngine {
         switch (effectiveSort) {
             case NEWEST -> sql.append("ORDER BY q.created_at DESC ");
             case OLDEST -> sql.append("ORDER BY q.created_at ASC ");
-            case MOST_ANSWERED -> sql.append("ORDER BY q.answers_count DESC, q.created_at DESC ");
+            case MOST_ANSWERED -> sql.append("ORDER BY q.answer_count DESC, q.created_at DESC ");
             case MOST_VIEWED -> sql.append("ORDER BY q.view_count DESC, q.created_at DESC ");
             case MOST_UPVOTED -> sql.append("ORDER BY q.vote_score DESC, q.created_at DESC ");
             case RELEVANCE -> {
@@ -84,7 +84,7 @@ public class PostgresQuestionSearchEngine implements QuestionSearchEngine {
             }
         }
 
-        Query nativeQuery = entityManager.createNativeQuery(sql.toString(), Question.class);
+        Query nativeQuery = entityManager.createNativeQuery(sql.toString());
         Query nativeCountQuery = entityManager.createNativeQuery(countSql.toString());
 
         // Bind parameters
@@ -122,20 +122,42 @@ public class PostgresQuestionSearchEngine implements QuestionSearchEngine {
         nativeQuery.setFirstResult((int) pageable.getOffset());
         nativeQuery.setMaxResults(pageable.getPageSize());
 
-        List<Question> questions = nativeQuery.getResultList();
+        List<Object[]> rows = nativeQuery.getResultList();
         long total = ((Number) nativeCountQuery.getSingleResult()).longValue();
 
-        List<QuestionSearchResult> results = questions.stream().map(q -> new QuestionSearchResult(
-                q.getId(),
-                q.getTitle(),
-                snippetService.generateSnippet(q.getContent(), queryStr),
-                q.getAuthor() != null ? q.getAuthor().getUsername() : null,
-                QuestionStatus.ANSWERED.equals(q.getStatus()),
-                q.getViewCount() != null ? q.getViewCount() : 0,
-                q.getAnswerCount() != null ? q.getAnswerCount() : 0,
-                q.getCreatedAt()
-        )).toList();
+        List<QuestionSearchResult> results = new ArrayList<>(rows.size());
+        for (Object[] row : rows) {
+            Long id = ((Number) row[0]).longValue();
+            String title = (String) row[1];
+            String content = (String) row[2];
+            String authorUsername = (String) row[3];
+            String status = (String) row[4];
+            int viewCount = row[5] != null ? ((Number) row[5]).intValue() : 0;
+            int answerCount = row[6] != null ? ((Number) row[6]).intValue() : 0;
+            Instant createdAt = convertToInstant(row[7]);
+
+            results.add(new QuestionSearchResult(
+                    id,
+                    title,
+                    snippetService.generateSnippet(content, queryStr),
+                    authorUsername,
+                    "ANSWERED".equalsIgnoreCase(status),
+                    viewCount,
+                    answerCount,
+                    createdAt
+            ));
+        }
 
         return new PageImpl<>(results, pageable, total);
+    }
+
+    private Instant convertToInstant(Object obj) {
+        if (obj == null) return null;
+        if (obj instanceof Instant instant) return instant;
+        if (obj instanceof java.sql.Timestamp ts) return ts.toInstant();
+        if (obj instanceof java.time.OffsetDateTime odt) return odt.toInstant();
+        if (obj instanceof java.time.ZonedDateTime zdt) return zdt.toInstant();
+        if (obj instanceof java.util.Date d) return d.toInstant();
+        return null;
     }
 }

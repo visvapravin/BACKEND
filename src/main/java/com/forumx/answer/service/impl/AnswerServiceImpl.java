@@ -44,6 +44,7 @@ public class AnswerServiceImpl implements AnswerService {
     private final AnswerRepository answerRepository;
     private final QuestionRepository questionRepository;
     private final UserRepository userRepository;
+    private final com.forumx.auth.repository.UserRoleRepository userRoleRepository;
     private final TenantRepository tenantRepository;
     private final AnswerMapper answerMapper;
     private final AuthenticationFacade authenticationFacade;
@@ -241,7 +242,7 @@ public class AnswerServiceImpl implements AnswerService {
     private User loadCurrentUser(CustomUserDetails currentUserDetails) {
         User user = userRepository.findByIdAndDeletedFalse(currentUserDetails.getUserId())
                 .orElseThrow(() -> new EntityNotFoundException("User not found with ID: " + currentUserDetails.getUserId()));
-        if (user.getTenant() == null || !user.getTenant().getId().equals(currentUserDetails.getTenantId())) {
+        if (!userRoleRepository.existsActiveMembership(user.getId(), currentUserDetails.getTenantId())) {
             throw new AccessDeniedException("User does not belong to the current tenant");
         }
         return user;

@@ -79,7 +79,7 @@ public class JwtTokenProvider {
             extraClaims.put(JwtClaimsConstants.SCOPE, tenantId == null ? "PLATFORM" : "TENANT");
             if (tenantId != null) {
                 extraClaims.put(JwtClaimsConstants.TENANT_ID, tenantId);
-                extraClaims.put(JwtClaimsConstants.TENANT_SLUG, customUserDetails.getUser().getTenant().getSlug());
+                extraClaims.put(JwtClaimsConstants.TENANT_SLUG, customUserDetails.getTenantSlug());
             }
 
             if (customUserDetails.getUser() != null) {

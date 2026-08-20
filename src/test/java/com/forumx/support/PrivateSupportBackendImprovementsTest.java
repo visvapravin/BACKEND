@@ -16,6 +16,7 @@ import static org.mockito.Mockito.when;
 
 import com.forumx.auth.entity.User;
 import com.forumx.auth.repository.UserRepository;
+import com.forumx.auth.repository.UserRoleRepository;
 import com.forumx.notification.service.NotificationApplicationService;
 import com.forumx.presence.service.PresenceService;
 import com.forumx.security.facade.AuthenticationFacade;
@@ -61,6 +62,7 @@ public class PrivateSupportBackendImprovementsTest {
     @Mock private SupportSessionParticipantRepository participantRepository;
     @Mock private TicketRepository ticketRepository;
     @Mock private UserRepository userRepository;
+    @Mock private UserRoleRepository userRoleRepository;
     @Mock private TenantRepository tenantRepository;
     @Mock private PresenceService presenceService;
     @Mock private ApplicationEventPublisher eventPublisher;
@@ -92,7 +94,7 @@ public class PrivateSupportBackendImprovementsTest {
                 eventPublisher
         );
         ticketService = new TicketServiceImpl(
-                ticketRepository, userRepository, tenantRepository, ticketMapper,
+                ticketRepository, userRepository, userRoleRepository, tenantRepository, ticketMapper,
                 authenticationFacade, tenantResolver, notificationApplicationService, eventPublisher,
                 chatSessionService, chatSessionRepository, presenceService, new com.forumx.support.ticket.policy.TicketStatusTransitionPolicy());
 

@@ -1,5 +1,6 @@
 package com.forumx.auth.invitation;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.*;
 
@@ -40,7 +41,7 @@ class InvitationServiceScopeTest {
 
         InvitationService service = new InvitationService(
                 invitations, users, mock(RoleRepository.class), userRoles,
-                mock(UserProfileRepository.class),
+                mock(UserProfileRepository.class), mock(com.forumx.tenant.repository.TenantRepository.class),
                 mock(TenantResolver.class), mock(AuthenticationFacade.class),
                 mock(PasswordEncoder.class), mock(NotificationPublisher.class),
                 new AccountScopeValidator());
@@ -54,6 +55,6 @@ class InvitationServiceScopeTest {
         verify(userRoles, never()).save(any());
         verify(invitations, never()).save(any());
         verify(invitations).findByTokenHashForUpdate(anyString());
-        org.junit.jupiter.api.Assertions.assertEquals(InvitationStatus.PENDING, invitation.getStatus());
+        assertEquals(InvitationStatus.PENDING, invitation.getStatus());
     }
 }

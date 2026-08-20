@@ -1,6 +1,5 @@
 package com.forumx.search.provider.postgres;
 
-import com.forumx.answer.entity.Answer;
 import com.forumx.search.domain.AnswerSearchResult;
 import com.forumx.search.dto.request.AnswerSearchFilter;
 import com.forumx.search.dto.request.SearchSort;
@@ -9,6 +8,8 @@ import com.forumx.search.service.SearchSnippetService;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import jakarta.persistence.Query;
+import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -30,9 +31,9 @@ public class PostgresAnswerSearchEngine implements AnswerSearchEngine {
     public Page<AnswerSearchResult> searchAnswers(
             Long tenantId, String queryStr, AnswerSearchFilter filter, SearchSort sort, Pageable pageable) {
 
-        StringBuilder sql = new StringBuilder("SELECT a.* ");
+        StringBuilder sql = new StringBuilder("SELECT a.id, a.question_id, a.content, u.username, a.created_at ");
         StringBuilder countSql = new StringBuilder("SELECT COUNT(a.id) ");
-        StringBuilder fromWhere = new StringBuilder("FROM answers a JOIN users u ON a.author_id = u.id WHERE a.deleted = false ");
+        StringBuilder fromWhere = new StringBuilder("FROM answers a JOIN users u ON a.author_id = u.id WHERE a.deleted = false AND u.deleted = false ");
 
         if (tenantId != null) {
             fromWhere.append("AND a.tenant_id = :tenantId ");
@@ -74,7 +75,7 @@ public class PostgresAnswerSearchEngine implements AnswerSearchEngine {
             default -> sql.append("ORDER BY a.created_at DESC ");
         }
 
-        Query nativeQuery = entityManager.createNativeQuery(sql.toString(), Answer.class);
+        Query nativeQuery = entityManager.createNativeQuery(sql.toString());
         Query nativeCountQuery = entityManager.createNativeQuery(countSql.toString());
 
         if (tenantId != null) {
@@ -111,17 +112,36 @@ public class PostgresAnswerSearchEngine implements AnswerSearchEngine {
         nativeQuery.setFirstResult((int) pageable.getOffset());
         nativeQuery.setMaxResults(pageable.getPageSize());
 
-        List<Answer> answers = nativeQuery.getResultList();
+        List<Object[]> rows = nativeQuery.getResultList();
         long total = ((Number) nativeCountQuery.getSingleResult()).longValue();
 
-        List<AnswerSearchResult> results = answers.stream().map(a -> new AnswerSearchResult(
-                a.getId(),
-                a.getQuestion() != null ? a.getQuestion().getId() : null,
-                snippetService.generateSnippet(a.getContent(), queryStr),
-                a.getAuthor() != null ? a.getAuthor().getUsername() : null,
-                a.getCreatedAt()
-        )).toList();
+        List<AnswerSearchResult> results = new ArrayList<>(rows.size());
+        for (Object[] row : rows) {
+            Long id = ((Number) row[0]).longValue();
+            Long questionId = row[1] != null ? ((Number) row[1]).longValue() : null;
+            String content = (String) row[2];
+            String authorUsername = (String) row[3];
+            Instant createdAt = convertToInstant(row[4]);
+
+            results.add(new AnswerSearchResult(
+                    id,
+                    questionId,
+                    snippetService.generateSnippet(content, queryStr),
+                    authorUsername,
+                    createdAt
+            ));
+        }
 
         return new PageImpl<>(results, pageable, total);
+    }
+
+    private Instant convertToInstant(Object obj) {
+        if (obj == null) return null;
+        if (obj instanceof Instant instant) return instant;
+        if (obj instanceof java.sql.Timestamp ts) return ts.toInstant();
+        if (obj instanceof java.time.OffsetDateTime odt) return odt.toInstant();
+        if (obj instanceof java.time.ZonedDateTime zdt) return zdt.toInstant();
+        if (obj instanceof java.util.Date d) return d.toInstant();
+        return null;
     }
 }

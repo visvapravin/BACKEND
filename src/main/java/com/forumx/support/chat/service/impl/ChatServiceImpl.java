@@ -1,7 +1,9 @@
 package com.forumx.support.chat.service.impl;
 
 import com.forumx.auth.entity.User;
+import com.forumx.auth.entity.UserRole;
 import com.forumx.auth.repository.UserRepository;
+import com.forumx.auth.repository.UserRoleRepository;
 import com.forumx.notification.service.NotificationApplicationService;
 import com.forumx.presence.service.PresenceService;
 import com.forumx.security.facade.AuthenticationFacade;
@@ -44,6 +46,7 @@ public class ChatServiceImpl implements ChatService {
     private final ChatMessageRepository chatMessageRepository;
     private final TicketRepository ticketRepository;
     private final UserRepository userRepository;
+    private final UserRoleRepository userRoleRepository;
     private final TenantResolver tenantResolver;
     private final AuthenticationFacade authenticationFacade;
     private final ApplicationEventPublisher eventPublisher;
@@ -95,7 +98,7 @@ public class ChatServiceImpl implements ChatService {
             recipientId = session.getCustomer().getId();
         }
 
-        if (recipientId != null && !presenceService.isOnline(recipientId)) {
+        if (recipientId != null && !presenceService.isUserOnlineInTenant(current.tenantId(), recipientId)) {
             String preview = savedMessage.getContent();
             if (preview != null && preview.length() > 100) {
                 preview = preview.substring(0, 100) + "...";
@@ -253,8 +256,10 @@ public class ChatServiceImpl implements ChatService {
         }
         User user = userRepository.findByIdAndDeletedFalse(details.getUserId())
                 .orElseThrow(() -> new EntityNotFoundException("User not found with ID: " + details.getUserId()));
-        if (user.getTenant() == null || !tenantId.equals(user.getTenant().getId())) {
-            throw new AccessDeniedException("User does not belong to the current tenant");
+        // Authoritative tenant membership check via UserRole — do NOT use user.getTenant()
+        List<UserRole> activeRoles = userRoleRepository.findActiveRolesByUserIdAndTenantId(user.getId(), tenantId);
+        if (activeRoles.isEmpty()) {
+            throw new AccessDeniedException("User does not have active membership in the current tenant");
         }
         return new CurrentUser(details.getUserId(), tenantId, user, details);
     }

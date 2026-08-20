@@ -26,6 +26,8 @@ public class LoginResponse {
     private String username;
     private String email;
     private Long tenantId;
+    private String tenantSlug;
+    private String scope;
     private List<String> roles;
     private List<String> permissions;
 }

@@ -36,6 +36,7 @@ public class VoteServiceImpl implements VoteService {
     private final AnswerRepository answerRepository;
     private final CommentRepository commentRepository;
     private final UserRepository userRepository;
+    private final com.forumx.auth.repository.UserRoleRepository userRoleRepository;
     private final VoteMapper voteMapper;
     private final TenantResolver tenantResolver;
     private final AuthenticationFacade authenticationFacade;
@@ -76,8 +77,26 @@ public class VoteServiceImpl implements VoteService {
     private void rejectSelf(User author, CurrentUser current) { if (author.getId().equals(current.userId())) throw new AccessDeniedException("Users cannot vote on their own content"); }
     private Question question(Long id, Long tenant) { Question q=questionRepository.findById(id).orElseThrow(()->new EntityNotFoundException("Question not found")); if (!q.getTenant().getId().equals(tenant)) throw new AccessDeniedException("Cross-tenant access denied"); return q; }
     private Answer answer(Long id, Long tenant) { Answer a=answerRepository.findById(id).orElseThrow(()->new EntityNotFoundException("Answer not found")); if (!a.getTenant().getId().equals(tenant)) throw new AccessDeniedException("Cross-tenant access denied"); return a; }
-    private Comment comment(Long id, Long tenant) { Comment m=commentRepository.findById(id).orElseThrow(()->new EntityNotFoundException("Comment not found")); if (!m.getAuthor().getTenant().getId().equals(tenant)) throw new AccessDeniedException("Cross-tenant access denied"); return m; }
-    private CurrentUser current() { Long t=tenantResolver.resolveTenantId(); CustomUserDetails d=authenticationFacade.getCurrentUserDetails(); if(t==null||d==null||!t.equals(d.getTenantId())) throw new AccessDeniedException("Authenticated tenant context is required"); User u=userRepository.findByIdAndDeletedFalse(d.getUserId()).orElseThrow(()->new EntityNotFoundException("User not found")); return new CurrentUser(u.getId(),t,u); }
+    private Comment comment(Long id, Long tenant) {
+        Comment m = commentRepository.findById(id).orElseThrow(() -> new EntityNotFoundException("Comment not found"));
+        Long commentTenantId = m.getQuestion() != null ? m.getQuestion().getTenant().getId() : (m.getAnswer() != null ? m.getAnswer().getTenant().getId() : null);
+        if (commentTenantId == null || !commentTenantId.equals(tenant)) {
+            throw new AccessDeniedException("Cross-tenant access denied");
+        }
+        return m;
+    }
+    private CurrentUser current() {
+        Long t = tenantResolver.resolveTenantId();
+        CustomUserDetails d = authenticationFacade.getCurrentUserDetails();
+        if (t == null || d == null || d.getTenantId() == null || !t.equals(d.getTenantId())) {
+            throw new AccessDeniedException("Authenticated tenant context is required");
+        }
+        User u = userRepository.findByIdAndDeletedFalse(d.getUserId()).orElseThrow(() -> new EntityNotFoundException("User not found"));
+        if (!userRoleRepository.existsActiveMembership(u.getId(), t)) {
+            throw new AccessDeniedException("User does not have active membership in this tenant");
+        }
+        return new CurrentUser(u.getId(), t, u);
+    }
     private void notifyQuestion(Question q, CurrentUser c, Vote v) { if(!v.isDeleted()&&v.getVoteType()==VoteType.UPVOTE) try { notificationApplicationService.notifyQuestionUpvoted(c.tenantId(),q.getAuthor().getId(),c.userId(),c.user().getUsername(),q.getId()); } catch(Exception e) { log.error("Vote notification failed",e); } }
     private void notifyAnswer(Answer a, CurrentUser c, Vote v) { if(!v.isDeleted()&&v.getVoteType()==VoteType.UPVOTE) try { notificationApplicationService.notifyAnswerUpvoted(c.tenantId(),a.getAuthor().getId(),c.userId(),c.user().getUsername(),a.getId()); } catch(Exception e) { log.error("Vote notification failed",e); } }
     private void notifyComment(Comment m, CurrentUser c, Vote v) { if(!v.isDeleted()&&v.getVoteType()==VoteType.UPVOTE) try { notificationApplicationService.notifyCommentUpvoted(c.tenantId(),m.getAuthor().getId(),c.userId(),c.user().getUsername(),m.getId()); } catch(Exception e) { log.error("Vote notification failed",e); } }

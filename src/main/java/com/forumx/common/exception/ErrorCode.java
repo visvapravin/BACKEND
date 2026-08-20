@@ -28,10 +28,10 @@ public enum ErrorCode {
     INVITATION_ALREADY_ACCEPTED("Invitation has already been accepted"),
     INVITATION_ALREADY_PENDING("An active invitation already exists for this email"),
     INVITATION_ALREADY_REVOKED("Invitation has already been revoked"),
-    EMAIL_ALREADY_REGISTERED("User account with this email already exists"),
     MODERATOR_NOT_FOUND("Moderator not found"),
     MODERATOR_ALREADY_DISABLED("Moderator account is already disabled"),
-    MODERATOR_ALREADY_ENABLED("Moderator account is already enabled");
+    MODERATOR_ALREADY_ENABLED("Moderator account is already enabled"),
+    ACCOUNT_DISABLED("Account or tenant is inactive or disabled");
 
     private final String defaultMessage;
 

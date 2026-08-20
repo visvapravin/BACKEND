@@ -40,6 +40,7 @@ public class CommentServiceImpl implements CommentService {
     private final QuestionRepository questionRepository;
     private final AnswerRepository answerRepository;
     private final UserRepository userRepository;
+    private final com.forumx.auth.repository.UserRoleRepository userRoleRepository;
     private final CommentMapper commentMapper;
     private final TenantResolver tenantResolver;
     private final AuthenticationFacade authenticationFacade;
@@ -199,8 +200,9 @@ public class CommentServiceImpl implements CommentService {
         Comment comment = commentRepository.findByIdAndDeletedFalse(commentId)
                 .orElseThrow(() -> new EntityNotFoundException("Comment not found with ID: " + commentId));
 
-        // Verify tenant boundary
-        if (!comment.getAuthor().getTenant().getId().equals(current.tenantId())) {
+        // Verify tenant boundary using parent resource tenant
+        Long commentTenantId = resolveCommentTenantId(comment);
+        if (!commentTenantId.equals(current.tenantId())) {
             throw new AccessDeniedException("Comment belongs to a different tenant");
         }
 
@@ -228,8 +230,9 @@ public class CommentServiceImpl implements CommentService {
         Comment comment = commentRepository.findByIdAndDeletedFalse(commentId)
                 .orElseThrow(() -> new EntityNotFoundException("Comment not found with ID: " + commentId));
 
-        // Verify tenant boundary
-        if (!comment.getAuthor().getTenant().getId().equals(current.tenantId())) {
+        // Verify tenant boundary using parent resource tenant
+        Long commentTenantId = resolveCommentTenantId(comment);
+        if (!commentTenantId.equals(current.tenantId())) {
             throw new AccessDeniedException("Comment belongs to a different tenant");
         }
 
@@ -246,10 +249,21 @@ public class CommentServiceImpl implements CommentService {
         commentRepository.save(comment);
     }
 
+    private Long resolveCommentTenantId(Comment comment) {
+        if (comment.getQuestion() != null) {
+            return comment.getQuestion().getTenant().getId();
+        }
+        if (comment.getAnswer() != null) {
+            return comment.getAnswer().getTenant().getId();
+        }
+        throw new com.forumx.common.exception.DomainIntegrityException(
+                "Comment is not associated with a tenant-owned resource");
+    }
+
     private CurrentUser resolveCurrentUser() {
         Long tenantId = tenantResolver.resolveTenantId();
         CustomUserDetails details = authenticationFacade.getCurrentUserDetails();
-        if (tenantId == null || details == null) {
+        if (tenantId == null || details == null || details.getTenantId() == null) {
             throw new AccessDeniedException("Authenticated tenant context is required");
         }
         if (!tenantId.equals(details.getTenantId())) {
@@ -257,7 +271,7 @@ public class CommentServiceImpl implements CommentService {
         }
         User user = userRepository.findByIdAndDeletedFalse(details.getUserId())
                 .orElseThrow(() -> new EntityNotFoundException("User not found with ID: " + details.getUserId()));
-        if (user.getTenant() == null || !tenantId.equals(user.getTenant().getId())) {
+        if (!userRoleRepository.existsActiveMembership(user.getId(), tenantId)) {
             throw new AccessDeniedException("User does not belong to the current tenant");
         }
         return new CurrentUser(details.getUserId(), tenantId, user, details);

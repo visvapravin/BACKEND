@@ -14,16 +14,20 @@ import com.forumx.search.metrics.SearchMetricsService;
 import com.forumx.search.service.SearchApplicationService;
 import com.forumx.search.service.SearchService;
 import com.forumx.security.facade.AuthenticationFacade;
+import com.forumx.security.model.CustomUserDetails;
 import com.forumx.tenant.resolver.TenantResolver;
 import java.time.Duration;
 import java.time.Instant;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
+@Transactional(readOnly = true)
 public class SearchApplicationServiceImpl implements SearchApplicationService {
 
     private final SearchService searchService;
@@ -36,7 +40,7 @@ public class SearchApplicationServiceImpl implements SearchApplicationService {
     public SearchPageResponse<QuestionSearchResult> searchQuestions(
             String query, QuestionSearchFilter filter, SearchSort sort, Pageable pageable) {
         Instant start = Instant.now();
-        Long tenantId = tenantResolver.resolveTenantId();
+        Long tenantId = resolveTenantForContentSearch();
         searchMetricsService.recordSearchRequest("QUESTION", searchProperties.getProvider());
 
         Page<QuestionSearchResult> page = searchService.searchQuestions(tenantId, query, filter, sort, pageable);
@@ -54,7 +58,7 @@ public class SearchApplicationServiceImpl implements SearchApplicationService {
     public SearchPageResponse<AnswerSearchResult> searchAnswers(
             String query, AnswerSearchFilter filter, SearchSort sort, Pageable pageable) {
         Instant start = Instant.now();
-        Long tenantId = tenantResolver.resolveTenantId();
+        Long tenantId = resolveTenantForContentSearch();
         searchMetricsService.recordSearchRequest("ANSWER", searchProperties.getProvider());
 
         Page<AnswerSearchResult> page = searchService.searchAnswers(tenantId, query, filter, sort, pageable);
@@ -72,7 +76,7 @@ public class SearchApplicationServiceImpl implements SearchApplicationService {
     public SearchPageResponse<UserSearchResult> searchUsers(
             String query, UserSearchFilter filter, SearchSort sort, Pageable pageable) {
         Instant start = Instant.now();
-        Long tenantId = tenantResolver.resolveTenantId();
+        Long tenantId = resolveTenantForUserSearch();
         boolean includeEmail = isAdminUser();
         searchMetricsService.recordSearchRequest("USER", searchProperties.getProvider());
 
@@ -90,7 +94,7 @@ public class SearchApplicationServiceImpl implements SearchApplicationService {
     @Override
     public GlobalSearchResponse globalSearch(String query, int limitPerCategory) {
         Instant start = Instant.now();
-        Long tenantId = tenantResolver.resolveTenantId();
+        Long tenantId = resolveTenantForContentSearch();
         boolean includeEmail = isAdminUser();
         searchMetricsService.recordSearchRequest("GLOBAL", searchProperties.getProvider());
 
@@ -103,6 +107,38 @@ public class SearchApplicationServiceImpl implements SearchApplicationService {
         }
 
         return response;
+    }
+
+    private Long resolveTenantForContentSearch() {
+        CustomUserDetails details = authenticationFacade.getCurrentUserDetails();
+        if (details == null || details.getTenantId() == null) {
+            throw new AccessDeniedException("Authenticated tenant context is required for content search");
+        }
+        Long tenantId = tenantResolver.resolveTenantId();
+        if (tenantId == null || !tenantId.equals(details.getTenantId())) {
+            throw new AccessDeniedException("User does not belong to the current tenant");
+        }
+        return tenantId;
+    }
+
+    private Long resolveTenantForUserSearch() {
+        CustomUserDetails details = authenticationFacade.getCurrentUserDetails();
+        if (details == null) {
+            throw new AccessDeniedException("Authentication required");
+        }
+        if (details.getTenantId() == null) {
+            boolean isPlatformAdmin = details.getAuthorities().stream()
+                    .anyMatch(a -> a.getAuthority().equals("ROLE_PLATFORM_ADMIN"));
+            if (isPlatformAdmin) {
+                return null;
+            }
+            throw new AccessDeniedException("Authenticated tenant context is required");
+        }
+        Long tenantId = tenantResolver.resolveTenantId();
+        if (tenantId == null || !tenantId.equals(details.getTenantId())) {
+            throw new AccessDeniedException("User does not belong to the current tenant");
+        }
+        return tenantId;
     }
 
     private boolean isAdminUser() {
