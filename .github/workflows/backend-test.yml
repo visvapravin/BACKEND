@@ -1,0 +1,55 @@
+name: Backend Test
+
+on:
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  test:
+    name: Run Unit & Integration Tests
+    runs-on: ubuntu-latest
+
+    # PostgreSQL service container for Testcontainers / integration tests
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: forumx_test
+          POSTGRES_USER: forumx
+          POSTGRES_PASSWORD: testpassword
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Make mvnw executable
+        run: chmod +x mvnw
+
+      - name: Run tests
+        env:
+          SPRING_PROFILES_ACTIVE: dev
+          SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/forumx_test
+          SPRING_DATASOURCE_USERNAME: forumx
+          SPRING_DATASOURCE_PASSWORD: testpassword
+          APP_SECURITY_JWT_SECRET: ${{ secrets.TEST_JWT_SECRET }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          CORS_ALLOWED_ORIGINS: http://localhost:3000
+          WEBSOCKET_ALLOWED_ORIGINS: http://localhost:3000
+          APP_FRONTEND_BASE_URL: http://localhost:3000
+        run: ./mvnw test -q

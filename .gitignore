@@ -1,0 +1,41 @@
+# ─── Build outputs ───────────────────────────────────────────────────────────
+target/
+.gradle/
+build/
+
+# ─── Environment & Secrets ───────────────────────────────────────────────────
+# NEVER commit .env — use .env.example as a safe template
+.env
+*.env.local
+application-local.yml
+application-local.properties
+application-secret.yml
+application-secret.properties
+
+# ─── IDE ─────────────────────────────────────────────────────────────────────
+.idea/
+.vscode/
+*.iml
+*.iws
+*.ipr
+.project
+.classpath
+.settings/
+.factorypath
+
+# ─── OS ──────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.tmp
+*.bak
+*.swp
+
+# ─── Logs ────────────────────────────────────────────────────────────────────
+logs/
+*.log
+
+# ─── Scratch / Generated ─────────────────────────────────────────────────────
+scratch/
+generated/
+bin/
+out/
