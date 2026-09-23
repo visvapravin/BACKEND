@@ -64,7 +64,6 @@ class TenantDeactivationIntegrationTest {
 
     private static final String DEACTIVATE_URL = "/api/v1/platform/tenants/{tenantId}";
     private static final String PLATFORM_LOGIN_URL = "/api/v1/platform/auth/login";
-    private static final String TENANT_LOGIN_URL = "/api/v1/auth/login";
 
     @Autowired private MockMvc mvc;
     @Autowired private ObjectMapper mapper;
@@ -140,7 +139,7 @@ class TenantDeactivationIntegrationTest {
                 .enabled(true).emailVerified(true)
                 .status(User.UserStatus.ACTIVE).build());
         UserRole taRole = userRoleRepository.save(UserRole.builder()
-                .user(tenantAdminUser).role(tenantAdminRole).active(true).build());
+                .user(tenantAdminUser).tenant(targetTenant).role(tenantAdminRole).active(true).build());
         tenantAdminUser.getUserRoles().add(taRole);
 
         // ── Regular user in targetTenant ─────────────────────────────────
@@ -152,12 +151,13 @@ class TenantDeactivationIntegrationTest {
                 .enabled(true).emailVerified(true)
                 .status(User.UserStatus.ACTIVE).build());
         UserRole uRole = userRoleRepository.save(UserRole.builder()
-                .user(tenantUser).role(userRole).active(true).build());
+                .user(tenantUser).tenant(targetTenant).role(userRole).active(true).build());
         tenantUser.getUserRoles().add(uRole);
 
         // ── Issue tokens for platform admin and tenant admin ─────────────
         platformToken = loginAsPlatformAdmin();
-        tenantAdminToken = jwt.generateAccessToken(new com.forumx.security.model.CustomUserDetails(tenantAdminUser));
+        tenantAdminToken = jwt.generateAccessToken(new com.forumx.security.model.CustomUserDetails(
+                tenantAdminUser, targetTenant.getId(), targetTenant.getSlug(), java.util.List.of(taRole)));
     }
 
     // ── 1. PLATFORM_ADMIN CAN DEACTIVATE ────────────────────────────────
@@ -210,6 +210,7 @@ class TenantDeactivationIntegrationTest {
                 RefreshToken.builder()
                         .token(java.util.UUID.randomUUID().toString())
                         .user(tenantUser)
+                        .tenant(targetTenant)
                         .revoked(false)
                         .expiresAt(Instant.now().plusSeconds(3600))
                         .build()
@@ -225,7 +226,7 @@ class TenantDeactivationIntegrationTest {
 
     @Test
     void deactivateTenant_revokesPendingModeratorInvitations() {
-        Role modRole = roleRepository.findByRoleName(RoleType.MODERATOR)
+        roleRepository.findByRoleName(RoleType.MODERATOR)
                 .orElseGet(() -> roleRepository.save(Role.builder()
                         .roleName(RoleType.MODERATOR).active(true).build()));
 

@@ -55,13 +55,6 @@ public class EnterpriseSearchIntegrationTest {
     private Tenant tenantB;
     private User userTenantA;
     private User userTenantB;
-    private User deletedUserTenantA;
-
-    private Question q1TenantA;
-    private Question q2TenantA;
-    private Question q3TenantAAnswered;
-    private Question q4TenantADeleted;
-    private Question q5TenantB;
 
     @BeforeEach
     public void setUp() {
@@ -104,7 +97,7 @@ public class EnterpriseSearchIntegrationTest {
                     return u;
                 });
 
-        deletedUserTenantA = userRepository.findByTenantIdAndEmailAndDeletedFalse(tenantA.getId(), "deleted_user_a@test.com")
+        userRepository.findByTenantIdAndEmailAndDeletedFalse(tenantA.getId(), "deleted_user_a@test.com")
                 .orElseGet(() -> userRepository.save(User.builder()
                         .tenant(tenantA)
                         .username("deleted_user_a")
@@ -117,7 +110,7 @@ public class EnterpriseSearchIntegrationTest {
         Instant now = Instant.now();
 
         // Setup Questions for Tenant A
-        q1TenantA = questionRepository.save(Question.builder()
+        questionRepository.save(Question.builder()
                 .tenant(tenantA)
                 .author(userTenantA)
                 .title("PostgreSQL Full Text Search In Spring Boot")
@@ -132,7 +125,7 @@ public class EnterpriseSearchIntegrationTest {
                 .version(1L)
                 .build());
 
-        q2TenantA = questionRepository.save(Question.builder()
+        questionRepository.save(Question.builder()
                 .tenant(tenantA)
                 .author(userTenantA)
                 .title("Redis PubSub Integration Guide")
@@ -147,7 +140,7 @@ public class EnterpriseSearchIntegrationTest {
                 .version(1L)
                 .build());
 
-        q3TenantAAnswered = questionRepository.save(Question.builder()
+        questionRepository.save(Question.builder()
                 .tenant(tenantA)
                 .author(userTenantA)
                 .title("Solved Spring Security Multi Tenancy")
@@ -162,7 +155,7 @@ public class EnterpriseSearchIntegrationTest {
                 .version(1L)
                 .build());
 
-        q4TenantADeleted = questionRepository.save(Question.builder()
+        questionRepository.save(Question.builder()
                 .tenant(tenantA)
                 .author(userTenantA)
                 .title("Deleted Question About Database")
@@ -178,7 +171,7 @@ public class EnterpriseSearchIntegrationTest {
                 .build());
 
         // Setup Question for Tenant B (Cross-tenant boundary test)
-        q5TenantB = questionRepository.save(Question.builder()
+        questionRepository.save(Question.builder()
                 .tenant(tenantB)
                 .author(userTenantB)
                 .title("Tenant B Confidential Spring Guide")

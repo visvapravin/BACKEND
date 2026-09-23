@@ -81,6 +81,8 @@ public interface AuthMapper {
      */
     @Mapping(target = "userId", source = "id")
     @Mapping(target = "tenantId", source = "tenant.id")
+    @Mapping(target = "tenantSlug", ignore = true)
+    @Mapping(target = "scope", ignore = true)
     @Mapping(target = "accessToken", ignore = true)
     @Mapping(target = "refreshToken", ignore = true)
     @Mapping(target = "tokenType", ignore = true)

@@ -148,7 +148,7 @@ springdoc:
 # ---------------------------------------------------------------
 app:
   google:
-    client-id: 924087041522-fqdejb0kii9a98v34ci0bslm50iesq61.apps.googleusercontent.com
+    client-id: ${GOOGLE_CLIENT_ID}
   security:
     jwt:
       secret: ${APP_SECURITY_JWT_SECRET}
@@ -156,9 +156,15 @@ app:
       access-token-expiration: 15m
       refresh-token-expiration: 7d
   frontend:
-    base-url: ${APP_FRONTEND_BASE_URL:http://localhost:3000}
+    base-url: ${APP_FRONTEND_BASE_URL:http://localhost:5173}
     verification-path: /verify-email
     reset-password-path: /reset-password
+  cors:
+    # Comma-separated list of allowed CORS origins.
+    # Local dev: http://localhost:3000
+    # Production: https://your-app.azurestaticapps.net
+    allowed-origins:
+      - ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
   verification:
     token-expiration: 24h
   password-reset:
@@ -179,9 +185,9 @@ forumx:
   # spring.data.redis.* is NOT used (we build LettuceConnectionFactory manually).
   redis:
     enabled: true
-    host: national-liger-179032.upstash.io
+    host: ${FORUMX_REDIS_HOST:localhost}
     port: 6379
-    password: ${FORUMX_REDIS_PASSWORD}
+    password: ${FORUMX_REDIS_PASSWORD:}
     ssl: true
     database: 0
     timeout: 5s
@@ -195,15 +201,15 @@ forumx:
       max-wait: 2s
 
   websocket:
-    allowed-origins: ${WEBSOCKET_ALLOWED_ORIGINS:http://localhost:5173}
+    allowed-origins: ${WEBSOCKET_ALLOWED_ORIGINS:http://localhost:3000}
 
   messaging:
     enabled: true
-    host: puffin.rmq2.cloudamqp.com
+    host: ${FORUMX_MESSAGING_HOST:puffin.rmq2.cloudamqp.com}
     port: 5671
     username: ${FORUMX_MESSAGING_USERNAME}
     password: ${FORUMX_MESSAGING_PASSWORD}
-    virtual-host: bjqdpchc
+    virtual-host: ${FORUMX_MESSAGING_VHOST:bjqdpchc}
     ssl: true
     publisher-confirm-type: correlated
     publisher-returns: true

@@ -21,5 +21,6 @@ public class TenantResponse {
     private Long storageQuotaMB;
     private String timezone;
     private String locale;
+    private String accessUrl;
     private Instant createdAt;
 }

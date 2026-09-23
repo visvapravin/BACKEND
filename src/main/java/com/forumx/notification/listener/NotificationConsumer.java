@@ -21,6 +21,7 @@ public class NotificationConsumer {
     private final NotificationApplicationService notificationApplicationService;
     private final NotificationDispatcher notificationDispatcher;
 
+    @Deprecated(forRemoval = true)
     @RabbitListener(queues = "forumx.notification.queue")
     public void consume(NotificationEvent event) {
         log.info("Received notification event for recipient {}", event.email());

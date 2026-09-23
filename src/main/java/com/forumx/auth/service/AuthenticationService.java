@@ -48,7 +48,6 @@ import com.forumx.common.exception.PasswordNotSetException;
 import com.forumx.common.exception.PasswordReuseException;
 import com.forumx.common.exception.UsernameAlreadyExistsException;
 import com.forumx.mail.EmailService;
-import com.forumx.notification.dto.NotificationEvent;
 import com.forumx.notification.publisher.NotificationPublisher;
 import com.forumx.security.facade.AuthenticationFacade;
 import com.forumx.security.jwt.JwtTokenProvider;
@@ -60,12 +59,9 @@ import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.authentication.LockedException;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -88,7 +84,6 @@ public class AuthenticationService {
     private final UserProfileRepository userProfileRepository;
     private final RefreshTokenRepository refreshTokenRepository;
     private final PasswordEncoder passwordEncoder;
-    private final AuthenticationManager authenticationManager;
     private final JwtTokenProvider jwtTokenProvider;
     private final AuthMapper authMapper;
     private final VerificationTokenRepository verificationTokenRepository;
@@ -190,30 +185,26 @@ public class AuthenticationService {
     public LoginResponse login(LoginRequest request, HttpServletRequest servletRequest) {
         log.debug("Validation details: authenticating usernameOrEmail={}", request.getUsernameOrEmail());
 
-        String requestedSlug = (request.getTenantSlug() != null && !request.getTenantSlug().isBlank())
-                ? request.getTenantSlug().trim()
-                : null;
+        if (request.getTenantSlug() == null || request.getTenantSlug().isBlank()) {
+            throw new BadCredentialsException("Tenant workspace must be specified for tenant login");
+        }
 
-        Tenant tenant = requestedSlug != null
-                ? tenantRepository.findBySlugAndDeletedFalse(requestedSlug)
-                        .orElseThrow(() -> new DisabledException("Tenant not found or inactive: " + requestedSlug))
-                : tenantRepository.findByIdAndDeletedFalse(tenantResolver.resolveTenantId())
-                        .orElseThrow(() -> new DisabledException("Tenant not found or inactive"));
+        String requestedSlug = request.getTenantSlug().trim();
+        Tenant tenant = tenantRepository.findBySlugAndDeletedFalse(requestedSlug)
+                .orElseThrow(() -> new BadCredentialsException("Workspace not found or inactive"));
         validateTenant(tenant);
 
-        User checkUser = userRepository.findForAuthenticationByTenantIdAndUsernameOrEmail(tenant.getId(), request.getUsernameOrEmail())
+        User user = userRepository.findByUsernameAndDeletedFalse(request.getUsernameOrEmail().trim())
+                .or(() -> userRepository.findByEmailAndDeletedFalse(request.getUsernameOrEmail().trim()))
                 .orElseThrow(() -> new BadCredentialsException("Invalid credentials"));
 
-        if (checkUser.getPasswordHash() == null) {
+        if (user.getPasswordHash() == null) {
             throw new PasswordNotSetException("This account currently uses Google Sign-In. Create a password to enable email login.");
         }
 
-        Authentication authentication = authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(request.getUsernameOrEmail(), request.getPassword())
-        );
-
-        CustomUserDetails userDetails = (CustomUserDetails) authentication.getPrincipal();
-        User user = userDetails.getUser();
+        if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
+            throw new BadCredentialsException("Invalid credentials");
+        }
 
         validateUserStatus(user);
 
@@ -223,7 +214,7 @@ public class AuthenticationService {
 
         List<UserRole> activeRoles = userRoleRepository.findActiveRolesByUserIdAndTenantId(user.getId(), tenant.getId());
         if (activeRoles.isEmpty()) {
-            log.warn("Login denied: User {} has no active role membership in tenant {}", user.getId(), tenant.getId());
+            log.warn("Login denied: User {} has no active membership in tenant {}", user.getId(), tenant.getSlug());
             throw new BadCredentialsException("User does not have active membership in the requested workspace");
         }
 
@@ -238,7 +229,7 @@ public class AuthenticationService {
     }
 
     /**
-     * Authenticates a user using a Google ID Token. Links accounts if email matches.
+     * Authenticates a user using a Google ID Token. Validates that global user has active membership in requested tenant.
      *
      * @param request        the Google login details
      * @param servletRequest the HTTP servlet request context
@@ -248,74 +239,45 @@ public class AuthenticationService {
     public LoginResponse googleLogin(GoogleLoginRequest request, HttpServletRequest servletRequest) {
         log.debug("Validation details: google login for tenantSlug={}", request.getTenantSlug());
 
+        if (request.getTenantSlug() == null || request.getTenantSlug().isBlank()) {
+            throw new BadCredentialsException("Tenant workspace must be specified for Google login");
+        }
+
         GoogleTokenVerifierService.GoogleClaims claims = googleTokenVerifierService.verify(request.getIdToken());
         String googleSub = claims.googleSub();
         String email = claims.email();
 
-        Tenant tenant = validateTenant(request.getTenantSlug());
-        User user;
+        Tenant tenant = validateTenant(request.getTenantSlug().trim());
 
-        java.util.Optional<User> userByGoogleId = userRepository.findByGoogleIdAndDeletedFalse(googleSub);
-        if (userByGoogleId.isPresent()) {
-            User existingUser = userByGoogleId.get();
-            if (!existingUser.getEmail().equals(email)) {
-                log.error("SECURITY EVENT: Google ID {} is already linked to user {} but login requested for email {}",
-                        googleSub, existingUser.getEmail(), email);
-                throw new BadCredentialsException("Google account is already linked to another account");
+        User user = userRepository.findByGoogleIdAndDeletedFalse(googleSub)
+                .orElseGet(() -> userRepository.findByEmailAndDeletedFalse(email).orElse(null));
+
+        if (user == null) {
+            log.warn("Google login rejected: No account found for email {}", email);
+            throw new BadCredentialsException("No account found with this Google email. Please sign up to join this workspace.");
+        }
+
+        if (user.getGoogleId() == null) {
+            user.setGoogleId(googleSub);
+            if (user.getUserProfile() != null && (user.getUserProfile().getAvatarUrl() == null || user.getUserProfile().getAvatarUrl().isEmpty())) {
+                user.getUserProfile().setAvatarUrl(claims.pictureUrl());
+                userProfileRepository.save(user.getUserProfile());
             }
-            user = existingUser;
-            assignDefaultRole(user, tenant);
-        } else {
-            java.util.Optional<User> userOpt = userRepository.findByEmailAndDeletedFalse(email);
-            if (userOpt.isPresent()) {
-                user = userOpt.get();
-                if (user.getGoogleId() == null) {
-                    user.setGoogleId(googleSub);
-                    if (user.getUserProfile() != null && (user.getUserProfile().getAvatarUrl() == null || user.getUserProfile().getAvatarUrl().isEmpty())) {
-                        user.getUserProfile().setAvatarUrl(claims.pictureUrl());
-                        userProfileRepository.save(user.getUserProfile());
-                    }
-                    userRepository.save(user);
-                } else {
-                    log.error("SECURITY EVENT: Google ID mismatch for email {}. Stored Google ID: {}, Verified Google ID: {}",
-                            user.getEmail(), user.getGoogleId(), googleSub);
-                    throw new BadCredentialsException("Google account mismatch");
-                }
-                assignDefaultRole(user, tenant);
-            } else {
-                String baseUsername = email.split("@")[0];
-                String username = baseUsername;
-                int count = 1;
-                while (userRepository.findByUsernameAndDeletedFalse(username).isPresent()) {
-                    username = baseUsername + count;
-                    count++;
-                }
-
-                user = User.builder()
-                        .tenant(null)
-                        .username(username)
-                        .email(email)
-                        .passwordHash(null)
-                        .emailVerified(true)
-                        .googleId(googleSub)
-                        .status(User.UserStatus.ACTIVE)
-                        .enabled(true)
-                        .build();
-                userRepository.saveAndFlush(user);
-
-                UserProfile profile = createUserProfile(user);
-                user.setUserProfile(profile);
-                if (claims.pictureUrl() != null) {
-                    profile.setAvatarUrl(claims.pictureUrl());
-                    userProfileRepository.save(profile);
-                }
-
-                assignDefaultRole(user, tenant);
-            }
+            userRepository.save(user);
+        } else if (!user.getGoogleId().equals(googleSub)) {
+            log.error("SECURITY EVENT: Google ID mismatch for email {}. Stored Google ID: {}, Verified Google ID: {}",
+                    user.getEmail(), user.getGoogleId(), googleSub);
+            throw new BadCredentialsException("Google account mismatch");
         }
 
         validateUserStatus(user);
         validateTenant(tenant);
+
+        List<UserRole> activeRoles = userRoleRepository.findActiveRolesByUserIdAndTenantId(user.getId(), tenant.getId());
+        if (activeRoles.isEmpty()) {
+            log.warn("Google login denied: User {} has no active membership in tenant {}", user.getId(), tenant.getSlug());
+            throw new BadCredentialsException("User does not have active membership in the requested workspace. Please sign up to join.");
+        }
 
         String accessToken = issueAccessToken(user, tenant.getId(), tenant.getSlug());
         String refreshToken = issueRefreshToken();

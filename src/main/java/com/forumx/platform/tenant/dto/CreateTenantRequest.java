@@ -1,7 +1,6 @@
 package com.forumx.platform.tenant.dto;
 
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -18,9 +17,7 @@ public class CreateTenantRequest {
     @Size(max = 100, message = "Tenant name must not exceed 100 characters")
     private String name;
 
-    @NotBlank(message = "Tenant slug is required")
-    @Size(min = 2, max = 50, message = "Tenant slug must be between 2 and 50 characters")
-    @Pattern(regexp = "^[a-z0-9]+(?:-[a-z0-9]+)*$", message = "Slug must contain only lowercase alphanumeric characters and hyphens")
+    @Size(max = 50, message = "Tenant slug must not exceed 50 characters")
     private String slug;
 
     @Size(max = 50)

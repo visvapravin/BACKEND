@@ -5,7 +5,6 @@ import com.forumx.auth.repository.UserRepository;
 import com.forumx.question.dto.request.CreateQuestionRequest;
 import com.forumx.question.dto.request.UpdateQuestionRequest;
 import com.forumx.question.dto.response.QuestionResponse;
-import com.forumx.common.exception.DomainIntegrityException;
 import com.forumx.question.event.QuestionCreatedEvent;
 import com.forumx.question.service.QuestionService;
 import com.forumx.question.entity.Question;

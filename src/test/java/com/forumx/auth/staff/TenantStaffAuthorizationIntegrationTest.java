@@ -1,6 +1,5 @@
 package com.forumx.auth.staff;
 
-import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -141,7 +140,7 @@ public class TenantStaffAuthorizationIntegrationTest {
                         .content(mapper.writeValueAsString(req)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.data.email").value(req.getEmail().toLowerCase()))
-                .andExpect(jsonPath("$.data.tenantName").value(tenantA.getName()));
+                .andExpect(jsonPath("$.data.tenantId").value(tenantA.getId()));
     }
 
     @Test
@@ -151,13 +150,13 @@ public class TenantStaffAuthorizationIntegrationTest {
                 .email("cross_tenant_mod_" + System.nanoTime() + "@example.com")
                 .build();
 
-        // Sending Token A with Tenant B header
+        // Sending Token A with Tenant B header -> 401 Unauthorized (rejected by JwtAuthenticationFilter)
         mvc.perform(post("/api/v1/admin/staff/invitations")
                         .header("Authorization", "Bearer " + tokenTenantAdminA)
                         .header("X-Tenant", tenantB.getSlug())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(mapper.writeValueAsString(req)))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
@@ -212,6 +211,7 @@ public class TenantStaffAuthorizationIntegrationTest {
         // Old expired invitation exists
         invitationRepository.save(ModeratorInvitation.builder()
                 .tenant(tenantA)
+                .invitedBy(tenantAdminA)
                 .email(email)
                 .role(RoleType.MODERATOR)
                 .tokenHash("old_expired_hash")

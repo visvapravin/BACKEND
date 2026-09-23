@@ -15,6 +15,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
+@SuppressWarnings("removal")
 public class NotificationSubscriberTest {
 
     private RealtimeGateway realtimeGateway;

@@ -24,11 +24,13 @@ public class NotificationEventSubscriber implements EventSubscriber {
     private final RealtimeGateway realtimeGateway;
     private final com.fasterxml.jackson.databind.ObjectMapper objectMapper = com.forumx.messaging.serializer.MessageSerializer.objectMapper();
 
+    @Deprecated(forRemoval = true)
     @Override
     public String queueName() {
         return MessagingQueues.USER_NOTIFICATION_QUEUE;
     }
 
+    @Deprecated(forRemoval = true)
     @RabbitListener(queues = MessagingQueues.USER_NOTIFICATION_QUEUE)
     public void onNotificationCreated(EventEnvelope<?> envelope) {
         log.info("Received notification created event. eventId={}, tenantId={}", envelope.eventId(), envelope.tenantId());

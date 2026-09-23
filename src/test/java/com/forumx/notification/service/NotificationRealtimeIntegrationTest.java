@@ -10,7 +10,7 @@ import com.forumx.messaging.dto.EventEnvelope;
 import com.forumx.notification.api.NotificationCommand;
 import com.forumx.notification.entity.NotificationType;
 import com.forumx.notification.entity.ReferenceType;
-import com.forumx.notification.listener.NotificationEventSubscriber;
+import com.forumx.notification.listener.NotificationProcessingSubscriber;
 import com.forumx.notification.repository.NotificationRepository;
 import com.forumx.security.facade.AuthenticationFacade;
 import com.forumx.tenant.entity.Tenant;
@@ -27,7 +27,10 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.support.TransactionTemplate;
 
 @ActiveProfiles("dev")
-@SpringBootTest(classes = ForumXApplication.class, properties = "forumx.messaging.enabled=true")
+@SpringBootTest(classes = ForumXApplication.class, properties = {
+        "forumx.messaging.enabled=true",
+        "spring.rabbitmq.listener.simple.auto-startup=false"
+})
 public class NotificationRealtimeIntegrationTest {
 
     @Autowired
@@ -76,7 +79,7 @@ public class NotificationRealtimeIntegrationTest {
     private com.forumx.moderation.repository.ModerationReportRepository reportRepository;
 
     @Autowired
-    private NotificationEventSubscriber notificationEventSubscriber;
+    private NotificationProcessingSubscriber notificationProcessingSubscriber;
 
     @Autowired
     private TransactionTemplate transactionTemplate;
@@ -172,7 +175,7 @@ public class NotificationRealtimeIntegrationTest {
                 event
         );
 
-        notificationEventSubscriber.onNotificationCreated(envelope);
+        notificationProcessingSubscriber.onNotificationCreated(envelope);
 
         // 3. Verify RealtimeGateway was invoked
         @SuppressWarnings("unchecked")

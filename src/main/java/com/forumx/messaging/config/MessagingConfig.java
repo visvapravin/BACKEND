@@ -70,6 +70,19 @@ public class MessagingConfig {
     }
 
     @Bean
+    public org.springframework.amqp.rabbit.config.SimpleRabbitListenerContainerFactory rabbitListenerContainerFactory(
+            ConnectionFactory connectionFactory,
+            Jackson2JsonMessageConverter converter,
+            @org.springframework.beans.factory.annotation.Value("${spring.rabbitmq.listener.simple.auto-startup:true}") boolean autoStartup) {
+        org.springframework.amqp.rabbit.config.SimpleRabbitListenerContainerFactory factory =
+                new org.springframework.amqp.rabbit.config.SimpleRabbitListenerContainerFactory();
+        factory.setConnectionFactory(connectionFactory);
+        factory.setMessageConverter(converter);
+        factory.setAutoStartup(autoStartup);
+        return factory;
+    }
+
+    @Bean
     public RabbitAdmin rabbitAdmin(ConnectionFactory factory) {
         return new RabbitAdmin(factory);
     }

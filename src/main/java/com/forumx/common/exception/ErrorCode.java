@@ -31,7 +31,10 @@ public enum ErrorCode {
     MODERATOR_NOT_FOUND("Moderator not found"),
     MODERATOR_ALREADY_DISABLED("Moderator account is already disabled"),
     MODERATOR_ALREADY_ENABLED("Moderator account is already enabled"),
-    ACCOUNT_DISABLED("Account or tenant is inactive or disabled");
+    ACCOUNT_DISABLED("Account or tenant is inactive or disabled"),
+    TENANT_SLUG_ALREADY_EXISTS("Tenant slug already exists"),
+    RESERVED_TENANT_SLUG("Tenant slug is reserved and cannot be used"),
+    INVALID_TENANT_SLUG("Tenant slug is invalid");
 
     private final String defaultMessage;
 

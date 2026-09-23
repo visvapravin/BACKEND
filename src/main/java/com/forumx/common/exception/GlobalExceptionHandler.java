@@ -630,6 +630,81 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * Handles TenantSlugAlreadyExistsException.
+     */
+    @ExceptionHandler(TenantSlugAlreadyExistsException.class)
+    public ResponseEntity<ApiResponse<ErrorResponse>> handleTenantSlugAlreadyExists(
+            TenantSlugAlreadyExistsException ex,
+            WebRequest request
+    ) {
+        String path = resolvePath(request);
+        String requestId = resolveRequestId(request);
+        log.warn(formatLogMessage(request, "Tenant slug already exists: " + ex.getMessage()));
+
+        ErrorResponse errorResponse = buildErrorResponse(
+                ErrorCode.TENANT_SLUG_ALREADY_EXISTS,
+                ex.getMessage(),
+                path,
+                requestId,
+                null
+        );
+
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(ApiResponse.error(ex.getMessage(), errorResponse, path));
+    }
+
+    /**
+     * Handles ReservedTenantSlugException.
+     */
+    @ExceptionHandler(ReservedTenantSlugException.class)
+    public ResponseEntity<ApiResponse<ErrorResponse>> handleReservedTenantSlug(
+            ReservedTenantSlugException ex,
+            WebRequest request
+    ) {
+        String path = resolvePath(request);
+        String requestId = resolveRequestId(request);
+        log.warn(formatLogMessage(request, "Reserved tenant slug: " + ex.getMessage()));
+
+        ErrorResponse errorResponse = buildErrorResponse(
+                ErrorCode.RESERVED_TENANT_SLUG,
+                ex.getMessage(),
+                path,
+                requestId,
+                null
+        );
+
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error(ex.getMessage(), errorResponse, path));
+    }
+
+    /**
+     * Handles InvalidTenantSlugException.
+     */
+    @ExceptionHandler(InvalidTenantSlugException.class)
+    public ResponseEntity<ApiResponse<ErrorResponse>> handleInvalidTenantSlug(
+            InvalidTenantSlugException ex,
+            WebRequest request
+    ) {
+        String path = resolvePath(request);
+        String requestId = resolveRequestId(request);
+        log.warn(formatLogMessage(request, "Invalid tenant slug: " + ex.getMessage()));
+
+        ErrorResponse errorResponse = buildErrorResponse(
+                ErrorCode.INVALID_TENANT_SLUG,
+                ex.getMessage(),
+                path,
+                requestId,
+                null
+        );
+
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error(ex.getMessage(), errorResponse, path));
+    }
+
+    /**
      * Handles PasswordMismatchException.
      */
     @ExceptionHandler(PasswordMismatchException.class)

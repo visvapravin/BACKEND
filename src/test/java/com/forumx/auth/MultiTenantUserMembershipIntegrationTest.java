@@ -12,7 +12,6 @@ import com.forumx.auth.entity.User;
 import com.forumx.auth.entity.UserRole;
 import com.forumx.auth.enums.RoleType;
 import com.forumx.auth.invitation.dto.request.AcceptInvitationRequest;
-import com.forumx.auth.invitation.dto.request.CreateInvitationRequest;
 import com.forumx.auth.invitation.entity.InvitationStatus;
 import com.forumx.auth.invitation.entity.ModeratorInvitation;
 import com.forumx.auth.invitation.repository.ModeratorInvitationRepository;
@@ -521,11 +520,11 @@ class MultiTenantUserMembershipIntegrationTest {
                         .content(mapper.writeValueAsString(req)))
                 .andExpect(status().isOk());
 
-        // Second acceptance attempt -> 409 Conflict (or 400 Bad Request)
+        // Second acceptance attempt -> 400 Bad Request (InvitationAlreadyAccepted)
         mvc.perform(post("/api/v1/auth/tenant-admin-invitations/accept")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(mapper.writeValueAsString(req)))
-                .andExpect(status().isConflict());
+                .andExpect(status().isBadRequest());
     }
 
     @Test

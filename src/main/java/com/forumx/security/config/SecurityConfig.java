@@ -37,17 +37,20 @@ public class SecurityConfig {
     private final PasswordEncoder passwordEncoder;
     private final Filter jwtAuthenticationFilter;
     private final AuthenticationEntryPoint authenticationEntryPoint;
+    private final CorsProperties corsProperties;
 
     public SecurityConfig(
             UserDetailsService userDetailsService,
             PasswordEncoder passwordEncoder,
             Filter jwtAuthenticationFilter,
-            AuthenticationEntryPoint authenticationEntryPoint
+            AuthenticationEntryPoint authenticationEntryPoint,
+            CorsProperties corsProperties
     ) {
         this.userDetailsService = userDetailsService;
         this.passwordEncoder = passwordEncoder;
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
         this.authenticationEntryPoint = authenticationEntryPoint;
+        this.corsProperties = corsProperties;
     }
 
     @Bean
@@ -139,7 +142,10 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOriginPatterns(List.of("*"));
+        // Origins are driven by CORS_ALLOWED_ORIGINS env var → app.cors.allowed-origins
+        // Local dev default: http://localhost:3000
+        // Production: set to deployed Azure Static Web Apps URL
+        configuration.setAllowedOrigins(corsProperties.getAllowedOrigins());
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
         configuration.setAllowedHeaders(List.of("*"));
         configuration.setExposedHeaders(List.of("Authorization", "X-Tenant-Id", "Location"));
