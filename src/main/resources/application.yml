@@ -103,11 +103,11 @@ server:
   port: ${SERVER_PORT:8080}
   shutdown: graceful
   error:
-    include-message: never
-    include-binding-errors: never
-    include-stacktrace: never
+    include-message: always
+    include-binding-errors: always
+    include-stacktrace: always
     whitelabel:
-      enabled: false
+      enabled: true
 
 # ---------------------------------------------------------------
 # Actuator – Health, Metrics
@@ -255,10 +255,14 @@ forumx:
 logging:
   level:
     root: INFO
-    com.forumx: INFO
-    org.springframework.web: WARN
-    org.hibernate.SQL: WARN
-    org.hibernate.orm.jdbc.bind: WARN
+    com.forumx: DEBUG
+    org.springframework.boot: INFO
+    org.springframework.web: INFO
+    org.springframework.security: DEBUG
+    org.hibernate.SQL: DEBUG
+    org.hibernate.orm.jdbc.bind: TRACE
+    com.zaxxer.hikari: DEBUG
+    org.flywaydb: DEBUG
     io.lettuce.core: WARN
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger{36} - %msg%n"
